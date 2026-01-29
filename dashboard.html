@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Monitoring ESP32</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+</head>
+<body>
+    <!-- Preloader -->
+    <div class="preloader">
+        <div class="preloader-content">
+            <div class="preloader-logo">
+                <i class="fas fa-microchip"></i>
+            </div>
+            <div class="preloader-text">
+                <h2>Memuat Dashboard</h2>
+                <p>Menyiapkan monitoring real-time...</p>
+            </div>
+            <div class="preloader-bar">
+                <div class="preloader-progress"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Notification Center -->
+    <div class="notification-center">
+        <!-- Notifikasi akan muncul di sini -->
+    </div>
+    
+    <div class="container">
+        <!-- Header dengan Animasi -->
+        <header class="header animate__animated animate__fadeInDown">
+            <div class="header-left">
+                <div class="header-logo">
+                    <i class="fas fa-microchip logo-spin"></i>
+                </div>
+                <div class="header-title">
+                    <h1><span class="gradient-text">ESP32</span> Smart Dashboard</h1>
+                    <p class="subtitle">Monitoring Suhu, Kelembaban & Level Air</p>
+                </div>
+            </div>
+            
+            <div class="header-right">
+                <div class="user-info">
+                    <div class="user-avatar">
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                    <div class="user-details">
+                        <span class="username" id="loggedUser">Administrator</span>
+                        <span class="user-role">Super Admin</span>
+                    </div>
+                    <button class="user-menu-btn" id="userMenuBtn">
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                    
+                    <!-- Dropdown Menu -->
+                    <div class="user-dropdown" id="userDropdown">
+                        <a href="#"><i class="fas fa-user"></i> Profil</a>
+                        <a href="#"><i class="fas fa-cog"></i> Pengaturan</a>
+                        <div class="dropdown-divider"></div>
+                        <a href="#" id="logoutBtn"><i class="fas fa-sign-out-alt"></i> Keluar</a>
+                    </div>
+                </div>
+                
+                <div class="header-actions">
+                    <button class="header-btn notification-btn" id="notificationBtn">
+                        <i class="fas fa-bell"></i>
+                        <span class="notification-badge">3</span>
+                    </button>
+                    
+                    <div class="connection-status">
+                        <div class="status-pulse"></div>
+                        <div class="status-indicator connected"></div>
+                        <span>ESP32 Terhubung</span>
+                    </div>
+                    
+                    <div class="last-update">
+                        <i class="fas fa-clock"></i>
+                        <span id="lastUpdateTime">-</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Dashboard Grid dengan Animasi -->
+        <div class="dashboard-grid animate__animated animate__fadeInUp">
+            <!-- Kartu Suhu -->
+            <div class="dashboard-card temperature-card card-hover-effect">
+                <div class="card-glow"></div>
+                <div class="card-header">
+                    <div class="card-icon animate__animated animate__pulse">
+                        <i class="fas fa-thermometer-half"></i>
+                    </div>
+                    <h3 class="card-title">Suhu Udara</h3>
+                    <button class="card-menu-btn">
+                        <i class="fas fa-ellipsis-v"></i>
+                    </button>
+                </div>
+                <div class="card-content">
+                    <div class="main-value animate__animated animate__rubberBand" id="tempValueContainer">
+                        <span id="tempValue">0</span>
+                        <span class="unit">°C</span>
+                    </div>
+                    <div class="additional-info">
+                        <div class="info-item">
+                            <span class="info-label">Status:</span>
+                            <span class="info-value status-badge" id="tempStatus">Normal</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Trend:</span>
+                            <span class="info-value">
+                                <i class="fas fa-arrow-up trend-up"></i>
+                                <span>Naik 0.5°C</span>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="card-chart-mini">
+                        <canvas id="tempMiniChart"></canvas>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <div class="sensor-info">
+                        <i class="fas fa-sensor"></i>
+                        <span>DHT11</span>
+                    </div>
+                    <div class="last-reading">
+                        <i class="fas fa-history"></i>
+                        <span id="tempLastUpdate">Baru saja</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Kartu Kelembaban Udara -->
+            <div class="dashboard-card humidity-card card-hover-effect">
+                <div class="card-glow"></div>
+                <div class="card-header">
+                    <div class="card-icon animate__animated animate__pulse">
+                        <i class="fas fa-tint"></i>
+                    </div>
+                    <h3 class="card-title">Kelembaban Udara</h3>
+                    <button class="card-menu-btn">
+                        <i class="fas fa-ellipsis-v"></i>
+                    </button>
+                </div>
+                <div class="card-content">
+                    <div class="main-value animate__animated animate__rubberBand" id="humValueContainer">
+                        <span id="humValue">0</span>
+                        <span class="unit">%</span>
+                    </div>
+                    <div class="additional-info">
+                        <div class="info-item">
+                            <span class="info-label">Status:</span>
+                            <span class="info-value status-badge" id="humStatus">Normal</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Dew Point:</span>
+                            <span class="info-value" id="dewPoint">18°C</span>
+                        </div>
+                    </div>
+                    <div class="humidity-visual">
+                        <div class="humidity-drop">
+                            <i class="fas fa-tint-drop"></i>
+                        </div>
+                        <div class="humidity-fill" id="humidityFill"></div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <div class="sensor-info">
+                        <i class="fas fa-sensor"></i>
+                        <span>DHT11</span>
+                    </div>
+                    <div class="last-reading">
+                        <i class="fas fa-history"></i>
+                        <span id="humLastUpdate">Baru saja</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Kartu Kelembaban Tanah -->
+            <div class="dashboard-card soil-card card-hover-effect">
+                <div class="card-glow"></div>
+                <div class="card-header">
+                    <div class="card-icon animate__animated animate__pulse">
+                        <i class="fas fa-seedling"></i>
+                    </div>
+                    <h3 class="card-title">Kelembaban Tanah</h3>
+                    <button class="card-menu-btn">
+                        <i class="fas fa-ellipsis-v"></i>
+                    </button>
+                </div>
+                <div class="card-content">
+                    <div class="main-value animate__animated animate__rubberBand" id="soilValueContainer">
+                        <span id="soilValue">0</span>
+                        <span class="unit">%</span>
+                    </div>
+                    <div class="additional-info">
+                        <div class="info-item">
+                            <span class="info-label">Status:</span>
+                            <span class="info-value status-badge" id="soilStatus">Normal</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Kondisi:</span>
+                            <span class="info-value" id="soilCondition">Lembab</span>
+                        </div>
+                    </div>
+                    <div class="soil-moisture-bar">
+                        <div class="moisture-labels">
+                            <span class="dry">Kering</span>
+                            <span class="optimal">Optimal</span>
+                            <span class="wet">Basah</span>
+                        </div>
+                        <div class="moisture-track">
+                            <div class="moisture-fill" id="soilMoistureFill"></div>
+                            <div class="moisture-indicator" id="soilIndicator"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <div class="sensor-info">
+                        <i class="fas fa-sensor"></i>
+                        <span>Sensor Tanah</span>
+                    </div>
+                    <div class="last-reading">
+                        <i class="fas fa-history"></i>
+                        <span id="soilLastUpdate">Baru saja</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Kartu Level Air -->
+            <div class="dashboard-card water-card card-hover-effect">
+                <div class="card-glow"></div>
+                <div class="card-header">
+                    <div class="card-icon animate__animated animate__pulse">
+                        <i class="fas fa-water"></i>
+                    </div>
+                    <h3 class="card-title">Level Air</h3>
+                    <button class="card-menu-btn">
+                        <i class="fas fa-ellipsis-v"></i>
+                    </button>
+                </div>
+                <div class="card-content">
+                    <div class="main-value animate__animated animate__rubberBand" id="waterValueContainer">
+                        <span id="waterValue">0</span>
+                        <span class="unit">%</span>
+                    </div>
+                    <div class="water-visual">
+                        <div class="water-tank">
+                            <div class="water-tank-fill" id="waterTankFill">
+                                <div class="water-wave"></div>
+                            </div>
+                            <div class="water-tank-markers">
+                                <span>25%</span>
+                                <span>50%</span>
+                                <span>75%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <div class="water-status" id="waterStatus">
+                        <i class="fas fa-check-circle"></i>
+                        <span>Normal</span>
+                    </div>
+                    <div class="water-alert" id="waterAlert">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <span>Isi ulang</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Grafik Monitoring dengan Tab -->
+        <div class="charts-section animate__animated animate__fadeInUp">
+            <div class="section-header">
+                <h2><i class="fas fa-chart-line"></i> Grafik Monitoring</h2>
+                <div class="chart-tabs">
+                    <button class="tab-btn active" data-tab="tempChart">Suhu</button>
+                    <button class="tab-btn" data-tab="humChart">Kelembaban Udara</button>
+                    <button class="tab-btn" data-tab="soilChart">Kelembaban Tanah</button>
+                    <button class="tab-btn" data-tab="allChart">Semua Data</button>
+                </div>
+            </div>
+            
+            <div class="charts-container">
+                <!-- Grafik Suhu -->
+                <div class="chart-card tab-content active" id="tempChart">
+                    <div class="chart-header">
+                        <h3><i class="fas fa-thermometer-half"></i> Grafik Suhu (°C)</h3>
+                        <div class="chart-controls">
+                            <button class="chart-btn active" data-time="1h">1 Jam</button>
+                            <button class="chart-btn" data-time="6h">6 Jam</button>
+                            <button class="chart-btn" data-time="24h">24 Jam</button>
+                            <button class="chart-btn" data-time="7d">7 Hari</button>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="tempChartCanvas"></canvas>
+                    </div>
+                </div>
+                
+                <!-- Grafik Kelembaban Udara -->
+                <div class="chart-card tab-content" id="humChart">
+                    <div class="chart-header">
+                        <h3><i class="fas fa-tint"></i> Grafik Kelembaban Udara (%)</h3>
+                        <div class="chart-controls">
+                            <button class="chart-btn active" data-time="1h">1 Jam</button>
+                            <button class="chart-btn" data-time="6h">6 Jam</button>
+                            <button class="chart-btn" data-time="24h">24 Jam</button>
+                            <button class="chart-btn" data-time="7d">7 Hari</button>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="humChartCanvas"></canvas>
+                    </div>
+                </div>
+                
+                <!-- Grafik Kelembaban Tanah -->
+                <div class="chart-card tab-content" id="soilChart">
+                    <div class="chart-header">
+                        <h3><i class="fas fa-seedling"></i> Grafik Kelembaban Tanah (%)</h3>
+                        <div class="chart-controls">
+                            <button class="chart-btn active" data-time="1h">1 Jam</button>
+                            <button class="chart-btn" data-time="6h">6 Jam</button>
+                            <button class="chart-btn" data-time="24h">24 Jam</button>
+                            <button class="chart-btn" data-time="7d">7 Hari</button>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="soilChartCanvas"></canvas>
+                    </div>
+                </div>
+                
+                <!-- Grafik Semua Data -->
+                <div class="chart-card tab-content" id="allChart">
+                    <div class="chart-header">
+                        <h3><i class="fas fa-chart-bar"></i> Semua Data</h3>
+                        <div class="chart-controls">
+                            <button class="chart-btn active" data-time="1h">1 Jam</button>
+                            <button class="chart-btn" data-time="6h">6 Jam</button>
+                            <button class="chart-btn" data-time="24h">24 Jam</button>
+                            <button class="chart-btn" data-time="7d">7 Hari</button>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="allChartCanvas"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Kontrol Panel -->
+        <div class="control-panel animate__animated animate__fadeInUp">
+            <div class="panel-header">
+                <h3><i class="fas fa-sliders-h"></i> Kontrol Perangkat</h3>
+                <div class="panel-status">
+                    <div class="status-dot online"></div>
+                    <span>ESP32 Online</span>
+                </div>
+            </div>
+            
+            <div class="controls-grid">
+                <div class="control-group">
+                    <h4><i class="fas fa-cog"></i> Pengaturan Umum</h4>
+                    <div class="control-item">
+                        <label class="control-label">
+                            <i class="fas fa-sync-alt"></i>
+                            Interval Pembaruan
+                        </label>
+                        <div class="control-input">
+                            <select id="updateInterval" class="select-animate">
+                                <option value="1000">1 Detik</option>
+                                <option value="2000" selected>2 Detik</option>
+                                <option value="5000">5 Detik</option>
+                                <option value="10000">10 Detik</option>
+                                <option value="30000">30 Detik</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="control-item">
+                        <label class="control-label">
+                            <i class="fas fa-bell"></i>
+                            Notifikasi
+                        </label>
+                        <div class="control-input">
+                            <label class="switch">
+                                <input type="checkbox" id="notificationToggle" checked>
+                                <span class="slider"></span>
+                            </label>
+                            <span class="switch-label">Aktif</span>
+                        </div>
+                    </div>
+                    
+                    <div class="control-item">
+                        <label class="control-label">
+                            <i class="fas fa-palette"></i>
+                            Tema Dashboard
+                        </label>
+                        <div class="control-input">
+                            <select id="themeSelect" class="select-animate">
+                                <option value="light">Terang</option>
+                                <option value="dark" selected>Gelap</option>
+                                <option value="blue">Biru</option>
+                                <option value="green">Hijau</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <h4><i class="fas fa-play-circle"></i> Mode Simulasi</h4>
+                    <div class="control-item">
+                        <label class="control-label">
+                            <i class="fas fa-random"></i>
+                            Mode Data
+                        </label>
+                        <div class="control-input">
+                            <label class="switch">
+                                <input type="checkbox" id="simulationToggle" checked>
+                                <span class="slider"></span>
+                            </label>
+                            <span class="switch-label" id="simulationLabel">Simulasi</span>
+                        </div>
+                    </div>
+                    
+                    <div class="control-item">
+                        <label class="control-label">
+                            <i class="fas fa-wave-square"></i>
+                            Variasi Data
+                        </label>
+                        <div class="control-input">
+                            <input type="range" id="dataVariation" min="1" max="10" value="5" class="slider-animate">
+                            <span class="range-value" id="variationValue">5</span>
+                        </div>
+                    </div>
+                    
+                    <div class="control-buttons">
+                        <button class="btn btn-primary btn-animate" id="refreshBtn">
+                            <i class="fas fa-sync-alt"></i>
+                            <span>Refresh Data</span>
+                            <div class="btn-wave"></div>
+                        </button>
+                        <button class="btn btn-secondary btn-animate" id="resetBtn">
+                            <i class="fas fa-redo"></i>
+                            <span>Reset Grafik</span>
+                        </button>
+                        <button class="btn btn-success btn-animate" id="exportBtn">
+                            <i class="fas fa-download"></i>
+                            <span>Export Data</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <h4><i class="fas fa-robot"></i> Kontrol Otomatis</h4>
+                    <div class="control-item">
+                        <label class="control-label">
+                            <i class="fas fa-tint"></i>
+                            Penyiraman Otomatis
+                        </label>
+                        <div class="control-input">
+                            <label class="switch">
+                                <input type="checkbox" id="autoWateringToggle">
+                                <span class="slider"></span>
+                            </label>
+                            <span class="switch-label">Mati</span>
+                        </div>
+                    </div>
+                    
+                    <div class="control-item">
+                        <label class="control-label">
+                            <i class="fas fa-temperature-low"></i>
+                            Threshold Kelembaban
+                        </label>
+                        <div class="control-input">
+                            <input type="range" id="humidityThreshold" min="20" max="80" value="40" class="slider-animate">
+                            <span class="range-value" id="thresholdValue">40%</span>
+                        </div>
+                    </div>
+                    
+                    <div class="control-item">
+                        <label class="control-label">
+                            <i class="fas fa-history"></i>
+                            Jadwal Penyiraman
+                        </label>
+                        <div class="control-input">
+                            <input type="time" id="wateringTime" value="08:00" class="time-input">
+                            <button class="btn btn-sm" id="setScheduleBtn">
+                                <i class="fas fa-save"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistik Footer -->
+        <footer class="footer animate__animated animate__fadeIn">
+            <div class="footer-stats">
+                <div class="stat-item">
+                    <i class="fas fa-database"></i>
+                    <div class="stat-info">
+                        <span class="stat-value" id="dataCounter">0</span>
+                        <span class="stat-label">Data Tersimpan</span>
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <i class="fas fa-clock"></i>
+                    <div class="stat-info">
+                        <span class="stat-value" id="uptime">0</span>
+                        <span class="stat-label">Detik Uptime</span>
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <i class="fas fa-wifi"></i>
+                    <div class="stat-info">
+                        <span class="stat-value">-45</span>
+                        <span class="stat-label">dBm Signal</span>
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <i class="fas fa-microchip"></i>
+                    <div class="stat-info">
+                        <span class="stat-value">32°C</span>
+                        <span class="stat-label">CPU Temp</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="footer-info">
+                <p>Dashboard Monitoring ESP32 • Dibuat dengan HTML, CSS & JavaScript • Data dari DHT11 & Sensor Tanah</p>
+                <p class="footer-status">
+                    <span class="status-indicator online"></span>
+                    <span>Status: <strong id="systemStatus">Aktif</strong></span>
+                    | Mode: <span id="simulationStatus" class="simulation-badge">Simulasi</span>
+                    | Versi: <span class="version">2.1.0</span>
+                </p>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Modal untuk Notifikasi -->
+    <div class="modal" id="notificationModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-bell"></i> Notifikasi</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="notification-list">
+                    <!-- Notifikasi akan dimuat di sini -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

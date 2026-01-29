@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - ESP32 Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+    <script src="script.js" defer></script>
+</head>
+<body class="login-page">
+    <!-- Container Utama -->
+    <div class="login-container">
+        <!-- Header Login -->
+        <header class="login-header animate__animated animate__fadeInDown">
+            <div class="login-header-content">
+                <div class="login-logo">
+                    <div class="logo-container">
+                        <i class="fas fa-microchip logo-spin"></i>
+                    </div>
+                    <div class="login-title">
+                        <h1 class="gradient-text">ESP32 Smart Dashboard</h1>
+                        <p class="login-subtitle">Monitoring Suhu, Kelembaban & Level Air</p>
+                    </div>
+                </div>
+                <div class="login-status-bar">
+                    <div class="status-indicator online">
+                        <div class="status-pulse"></div>
+                    </div>
+                    <span>Sistem Siap</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Konten Utama -->
+        <main class="login-main">
+            <!-- Panel Kiri: Info Sistem -->
+            <div class="login-info-panel animate__animated animate__fadeInLeft">
+                <div class="info-card">
+                    <div class="info-icon">
+                        <i class="fas fa-microchip"></i>
+                    </div>
+                    <h3>ESP32 Monitoring System</h3>
+                    <p>Sistem monitoring real-time untuk sensor DHT11 dan kelembaban tanah dengan kontrol otomatis.</p>
+                    
+                    <div class="features-list">
+                        <div class="feature-item">
+                            <i class="fas fa-thermometer-half"></i>
+                            <span>Monitoring Suhu & Kelembaban</span>
+                        </div>
+                        <div class="feature-item">
+                            <i class="fas fa-seedling"></i>
+                            <span>Sensor Kelembaban Tanah</span>
+                        </div>
+                        <div class="feature-item">
+                            <i class="fas fa-water"></i>
+                            <span>Level Air Otomatis</span>
+                        </div>
+                        <div class="feature-item">
+                            <i class="fas fa-chart-line"></i>
+                            <span>Grafik Real-time</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="system-preview">
+                    <h4><i class="fas fa-tachometer-alt"></i> Preview Dashboard</h4>
+                    <div class="preview-grid">
+                        <div class="preview-card temp-preview">
+                            <i class="fas fa-thermometer-half"></i>
+                            <span>25.5°C</span>
+                        </div>
+                        <div class="preview-card hum-preview">
+                            <i class="fas fa-tint"></i>
+                            <span>65%</span>
+                        </div>
+                        <div class="preview-card soil-preview">
+                            <i class="fas fa-seedling"></i>
+                            <span>45%</span>
+                        </div>
+                        <div class="preview-card water-preview">
+                            <i class="fas fa-water"></i>
+                            <span>75%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel Kanan: Form Login -->
+            <div class="login-form-panel animate__animated animate__fadeInRight">
+                <div class="form-container">
+                    <div class="form-header">
+                        <h2><i class="fas fa-sign-in-alt"></i> Masuk ke Dashboard</h2>
+                        <p>Silakan masuk untuk mengakses sistem monitoring</p>
+                    </div>
+
+                    <form id="loginForm" class="login-form">
+                        <div class="input-group animate__animated animate__fadeInUp">
+                            <div class="input-label">
+                                <i class="fas fa-user"></i>
+                                <label for="username">Username</label>
+                            </div>
+                            <div class="input-wrapper">
+                                <input type="text" id="username" placeholder="Masukkan username" required>
+                                <div class="input-border"></div>
+                            </div>
+                        </div>
+
+                        <div class="input-group animate__animated animate__fadeInUp">
+                            <div class="input-label">
+                                <i class="fas fa-lock"></i>
+                                <label for="password">Password</label>
+                            </div>
+                            <div class="input-wrapper">
+                                <input type="password" id="password" placeholder="Masukkan password" required>
+                                <div class="input-border"></div>
+                                <button type="button" class="toggle-password" id="togglePassword">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="form-options">
+                            <label class="checkbox-container">
+                                <input type="checkbox" id="rememberMe">
+                                <span class="checkmark"></span>
+                                <span>Ingat Saya</span>
+                            </label>
+                            <a href="#" class="forgot-link">Lupa Password?</a>
+                        </div>
+
+                        <button type="submit" class="login-btn btn-primary btn-animate">
+                            <span class="btn-content">
+                                <i class="fas fa-sign-in-alt"></i>
+                                <span>Masuk ke Dashboard</span>
+                            </span>
+                            <div class="btn-loader">
+                                <div class="loader-dot"></div>
+                                <div class="loader-dot"></div>
+                                <div class="loader-dot"></div>
+                            </div>
+                        </button>
+
+                        <div class="demo-credentials animate__animated animate__fadeIn">
+                            <div class="demo-header">
+                                <i class="fas fa-info-circle"></i>
+                                <span>Credentials Demo</span>
+                            </div>
+                            <div class="credentials-grid">
+                                <div class="credential-item">
+                                    <span class="cred-label">Username:</span>
+                                    <span class="cred-value">admin</span>
+                                </div>
+                                <div class="credential-item">
+                                    <span class="cred-label">Password:</span>
+                                    <span class="cred-value">admin123</span>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+
+                    <div class="login-footer">
+                        <div class="security-info">
+                            <i class="fas fa-shield-alt"></i>
+                            <span>Sistem dilindungi dengan enkripsi SSL</span>
+                        </div>
+                        <div class="version-info">
+                            <span>v2.1.0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="login-page-footer">
+            <div class="footer-content">
+                <p>© 2023 ESP32 Smart Monitoring System • Dibuat dengan <i class="fas fa-heart"></i> untuk monitoring IoT</p>
+                <div class="footer-links">
+                    <a href="#"><i class="fas fa-question-circle"></i> Bantuan</a>
+                    <a href="#"><i class="fas fa-file-alt"></i> Dokumentasi</a>
+                    <a href="#"><i class="fas fa-envelope"></i> Kontak</a>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Dashboard Container (Tersembunyi) -->
+    <div id="dashboardContainer" style="display: none;"></div>
+</body>
+</html>
