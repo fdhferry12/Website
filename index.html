@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Web Dashboard Monitoring</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-left">
+                <h1><i class="fas fa-microchip"></i> ESP32 Web Dashboard Monitoring</h1>
+                <p class="subtitle">Sistem Monitoring Secara Real Time Pada Mini Green House</p>
+            </div>
+            <div class="header-right">
+                <div class="user-info">
+                    <i class="fas fa-user"></i>
+                    <span id="currentUser">Admin</span>
+                </div>
+                <button class="btn-logout" id="logoutBtn" title="Logout">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Dashboard Grid -->
+        <div class="dashboard-grid">
+            <!-- Temperature Card -->
+            <div class="dashboard-card temperature-card">
+                <div class="card-header">
+                    <div class="card-icon">
+                        <i class="fas fa-thermometer-half"></i>
+                    </div>
+                    <div class="card-title">Suhu Udara</div>
+                </div>
+                <div class="card-content">
+                    <div class="main-value">
+                        <span id="tempValue">--</span>
+                        <span class="unit">°C</span>
+                    </div>
+                    <div class="additional-info">
+                        <div class="info-item">
+                            <span class="info-label">Status:</span>
+                            <span class="info-value" id="tempStatus">Loading...</span>
+                        </div>
+                    </div>
+                    <div class="temp-gauge-container">
+                        <div class="temp-gauge-bar">
+                            <div class="temp-gauge-fill" id="tempGaugeFill"></div>
+                        </div>
+                        <div class="temp-condition-markers">
+                            <span class="condition-marker" data-condition="cold">Dingin</span>
+                            <span class="condition-marker" data-condition="normal">Normal</span>
+                            <span class="condition-marker" data-condition="hot">Panas</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Humidity Card -->
+            <div class="dashboard-card humidity-card">
+                <div class="card-header">
+                    <div class="card-icon">
+                        <i class="fas fa-tint"></i>
+                    </div>
+                    <div class="card-title">Kelembaban Udara</div>
+                </div>
+                <div class="card-content">
+                    <div class="main-value">
+                        <span id="humValue">--</span>
+                        <span class="unit">%</span>
+                    </div>
+                    <div class="additional-info">
+                        <div class="info-item">
+                            <span class="info-label">Status:</span>
+                            <span class="info-value" id="humStatus">Loading...</span>
+                        </div>
+                    </div>
+                    <div class="hum-gauge-container">
+                        <div class="hum-gauge-bar">
+                            <div class="hum-gauge-fill" id="humGaugeFill"></div>
+                        </div>
+                        <div class="hum-condition-markers">
+                            <span class="condition-marker" data-condition="dry">Kering</span>
+                            <span class="condition-marker" data-condition="normal">Normal</span>
+                            <span class="condition-marker" data-condition="wet">Lembab</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Soil Moisture Card -->
+            <div class="dashboard-card soil-card">
+                <div class="card-header">
+                    <div class="card-icon">
+                        <i class="fas fa-seedling"></i>
+                    </div>
+                    <div class="card-title">Kelembaban Tanah</div>
+                </div>
+                <div class="card-content">
+                    <div class="main-value">
+                        <span id="soilValue">--</span>
+                        <span class="unit">%</span>
+                    </div>
+                    <div class="additional-info">
+                        <div class="info-item">
+                            <span class="info-label">Status:</span>
+                            <span class="info-value" id="soilStatus">Loading...</span>
+                        </div>
+                    </div>
+                    <div class="soil-moisture-container">
+                        <div class="soil-level-bar">
+                            <div class="soil-level-fill" id="soilLevelFill"></div>
+                        </div>
+                        <div class="soil-level-markers">
+                            <span class="condition-marker" data-condition="dry">Kering</span>
+                            <span class="condition-marker" data-condition="optimal">Optimal</span>
+                            <span class="condition-marker" data-condition="wet">Basah</span>
+                        </div>
+                        <div class="soil-recommendation" id="soilRecommendation">
+                            <i class="fas fa-info-circle"></i>
+                            <span>Loading...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Water Level Card -->
+            <div class="dashboard-card water-card">
+                <div class="card-header">
+                    <div class="card-icon">
+                        <i class="fas fa-water"></i>
+                    </div>
+                    <div class="card-title">Level Air</div>
+                </div>
+                <div class="card-content">
+                    <div class="main-value">
+                        <span id="waterValue">--</span>
+                        <span class="unit">%</span>
+                    </div>
+                    <div class="additional-info">
+                        <div class="info-item">
+                            <span class="info-label">Status:</span>
+                            <span class="info-value" id="waterStatus">Loading...</span>
+                        </div>
+                    </div>
+                    <div class="water-level-container">
+                        <div class="water-level-bar">
+                            <div class="water-level-fill" id="waterLevelFill"></div>
+                        </div>
+                        <div class="water-level-markers">
+                            <span class="condition-marker" data-condition="low">Rendah</span>
+                            <span class="condition-marker" data-condition="normal">Normal</span>
+                            <span class="condition-marker" data-condition="high">Tinggi</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Container -->
+        <div class="charts-container">
+            <!-- Temperature Chart -->
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h3><i class="fas fa-chart-line"></i> Grafik Suhu Udara</h3>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="tempChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Humidity Chart -->
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h3><i class="fas fa-chart-line"></i> Grafik Kelembaban Udara</h3>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="humChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Soil Moisture Chart -->
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h3><i class="fas fa-chart-line"></i> Grafik Kelembaban Tanah</h3>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="soilChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Water Level Chart -->
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h3><i class="fas fa-chart-line"></i> Grafik Level Air</h3>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="waterChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Control Panel -->
+        <div class="control-panel">
+            <h3><i class="fas fa-cogs"></i> Panel Kontrol</h3>
+            <div class="controls-grid">
+                <div class="control-item">
+                    <label class="control-label">Interval Pembaruan Data</label>
+                    <div class="control-input">
+                        <select id="updateInterval">
+                            <option value="1000">1 detik</option>
+                            <option value="2000" selected>2 detik</option>
+                            <option value="5000">5 detik</option>
+                            <option value="10000">10 detik</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="control-item">
+                    <label class="control-label">Mode Simulasi</label>
+                    <div class="control-input">
+                        <label class="switch">
+                            <input type="checkbox" id="simulationToggle" checked>
+                            <span class="slider"></span>
+                        </label>
+                        <span class="switch-label" id="simulationStatus">Aktif</span>
+                    </div>
+                </div>
+                <div class="control-item">
+                    <label class="control-label">Data Counter</label>
+                    <div class="control-input">
+                        <span id="dataCounter">0</span> data points
+                    </div>
+                </div>
+                <div class="control-item">
+                    <label class="control-label">Uptime</label>
+                    <div class="control-input">
+                        <span id="uptime">0</span> detik
+                    </div>
+                </div>
+            </div>
+            <div style="margin-top: 20px; display: flex; gap: 15px;">
+                <button class="btn btn-primary" id="refreshBtn">
+                    <i class="fas fa-sync-alt"></i> Refresh Data
+                </button>
+                <button class="btn btn-secondary" id="resetBtn">
+                    <i class="fas fa-trash"></i> Reset Data
+                </button>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>&copy; 2026 ESP32 Web Dashboard Monitoring</p>
+            <div class="footer-info">
+                Terakhir diperbarui: <span id="lastUpdateTime">--:--:--</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
