@@ -1,611 +1,367 @@
-// Smart Greenhouse Dual Control - JavaScript
+// Smart Greenhouse Dual Control - Real Data, Manual Default, No Humidity
 document.addEventListener('DOMContentLoaded', function() {
-    // ============================
-    // AUTHENTICATION FUNCTIONS
-    // ============================
+    const ESP32_IP = '192.168.1.100'; // GANTI DENGAN IP ESP32 ANDA
+    const ESP32_BASE_URL = `http://${ESP32_IP}`;
+
+    // Auth
     function displayUsername() {
-        const username = localStorage.getItem('username') || 'Admin';
-        document.getElementById('currentUser').textContent = username;
+        document.getElementById('currentUser').textContent = localStorage.getItem('username') || 'Admin';
     }
-
     function setupLogout() {
-        const logoutBtn = document.getElementById('logoutBtn');
-        if (logoutBtn) {
-            logoutBtn.addEventListener('click', function() {
-                if (confirm('Apakah Anda yakin ingin keluar?')) {
-                    localStorage.removeItem('isLoggedIn');
-                    localStorage.removeItem('username');
-                    window.location.href = 'login.html';
-                }
-            });
-        }
+        document.getElementById('logoutBtn')?.addEventListener('click', () => {
+            if (confirm('Apakah Anda yakin ingin keluar?')) {
+                localStorage.removeItem('isLoggedIn');
+                localStorage.removeItem('username');
+                window.location.href = 'login.html';
+            }
+        });
     }
-
     function setupAutoLogout() {
-        let inactivityTimer;
-        
-        function resetInactivityTimer() {
-            clearTimeout(inactivityTimer);
-            inactivityTimer = setTimeout(logoutDueToInactivity, 30 * 60 * 1000);
+        let timer;
+        function reset() {
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+                alert('Sesi berakhir. Silakan login kembali.');
+                localStorage.removeItem('isLoggedIn');
+                localStorage.removeItem('username');
+                window.location.href = 'login.html';
+            }, 30 * 60 * 1000);
         }
-        
-        function logoutDueToInactivity() {
-            alert('Sesi telah berakhir karena tidak ada aktivitas. Silakan login kembali.');
-            localStorage.removeItem('isLoggedIn');
-            localStorage.removeItem('username');
-            window.location.href = 'login.html';
-        }
-        
-        document.addEventListener('mousemove', resetInactivityTimer);
-        document.addEventListener('keypress', resetInactivityTimer);
-        document.addEventListener('click', resetInactivityTimer);
-        resetInactivityTimer();
+        document.addEventListener('mousemove', reset);
+        document.addEventListener('keypress', reset);
+        document.addEventListener('click', reset);
+        reset();
     }
 
-    // ============================
-    // WATERING SYSTEM STATE
-    // ============================
+    // State (tanpa humidity)
     const state = {
-        mode: 'auto',
-        simulationMode: true,
+        mode: 'manual',           // DEFAULT MANUAL
         updateInterval: 2000,
         dataCounter: 0,
         uptime: 0,
-        
-        // Zone 1
         pump1On: false,
         isWatering1: false,
         wateringTimer1: null,
         dryThreshold1: 30,
         optimalThreshold1: 60,
         wateringDuration1: 15,
-        
-        // Zone 2
         pump2On: false,
         isWatering2: false,
         wateringTimer2: null,
         dryThreshold2: 30,
         optimalThreshold2: 60,
-        wateringDuration2: 15
+        wateringDuration2: 15,
+        mqttConnected: false,
+        lastRealData: null,
+        esp32Reachable: false
     };
 
-    // ============================
-    // CHART INSTANCES
-    // ============================
-    let tempChart, humChart, soil1Chart, soil2Chart, waterChart;
-    let tempData = [], humData = [], soil1Data = [], soil2Data = [], waterData = [], timeLabels = [];
-    
+    // MQTT
+    const MQTT_BROKER = 'wss://broker.emqx.io:8084/mqtt';
+    const MQTT_TOPIC = 'tandon/status';
+    let mqttClient = null;
+
+    // Charts (tanpa humidity)
+    let tempChart, soil1Chart, soil2Chart, waterChart;
+    let tempData = [], soil1Data = [], soil2Data = [], waterData = [], timeLabels = [];
     const chartOptions = {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: {
-                display: true,
-                position: 'top',
-            },
-            tooltip: {
-                mode: 'index',
-                intersect: false,
-            }
-        },
-        scales: {
-            x: {
-                grid: {
-                    display: true,
-                    color: 'rgba(0,0,0,0.05)'
-                },
-                ticks: {
-                    maxTicksLimit: 10
-                }
-            },
-            y: {
-                grid: {
-                    display: true,
-                    color: 'rgba(0,0,0,0.05)'
-                },
-                beginAtZero: false
-            }
-        },
-        animation: {
-            duration: 1000
-        },
-        interaction: {
-            intersect: false,
-            mode: 'nearest'
-        }
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'top' }, tooltip: { mode: 'index', intersect: false } },
+        scales: { x: { grid: { display: true, color: 'rgba(0,0,0,0.05)' }, ticks: { maxTicksLimit: 10 } },
+                  y: { grid: { display: true, color: 'rgba(0,0,0,0.05)' }, beginAtZero: false } },
+        animation: { duration: 1000 },
+        interaction: { intersect: false, mode: 'nearest' }
     };
 
     function initCharts() {
-        // Temperature Chart
-        const tempCtx = document.getElementById('tempChart').getContext('2d');
-        tempChart = new Chart(tempCtx, {
+        tempChart = new Chart(document.getElementById('tempChart').getContext('2d'), {
             type: 'line',
-            data: {
-                labels: timeLabels,
-                datasets: [{
-                    label: 'Suhu Udara (°C)',
-                    data: tempData,
-                    borderColor: '#ff6b6b',
-                    backgroundColor: 'rgba(255, 107, 107, 0.1)',
-                    borderWidth: 3,
-                    tension: 0.4,
-                    fill: true,
-                    pointBackgroundColor: '#ff6b6b',
-                    pointRadius: 4,
-                    pointHoverRadius: 6
-                }]
-            },
+            data: { labels: timeLabels, datasets: [{ label: 'Suhu (°C)', data: tempData, borderColor: '#ff6b6b', backgroundColor: 'rgba(255,107,107,0.1)', borderWidth: 3, tension: 0.4, fill: true, pointRadius: 4, pointHoverRadius: 6 }] },
             options: chartOptions
         });
-
-        // Humidity Chart
-        const humCtx = document.getElementById('humChart').getContext('2d');
-        humChart = new Chart(humCtx, {
+        soil1Chart = new Chart(document.getElementById('soil1Chart').getContext('2d'), {
             type: 'line',
-            data: {
-                labels: timeLabels,
-                datasets: [{
-                    label: 'Kelembaban Udara (%)',
-                    data: humData,
-                    borderColor: '#4d96ff',
-                    backgroundColor: 'rgba(77, 150, 255, 0.1)',
-                    borderWidth: 3,
-                    tension: 0.4,
-                    fill: true,
-                    pointBackgroundColor: '#4d96ff',
-                    pointRadius: 4,
-                    pointHoverRadius: 6
-                }]
-            },
+            data: { labels: timeLabels, datasets: [{ label: 'Soil 1 (%)', data: soil1Data, borderColor: '#8B4513', backgroundColor: 'rgba(139,69,19,0.1)', borderWidth: 3, tension: 0.4, fill: true, pointRadius: 4, pointHoverRadius: 6 }] },
             options: chartOptions
         });
-
-        // Soil Moisture 1 Chart
-        const soil1Ctx = document.getElementById('soil1Chart').getContext('2d');
-        soil1Chart = new Chart(soil1Ctx, {
+        soil2Chart = new Chart(document.getElementById('soil2Chart').getContext('2d'), {
             type: 'line',
-            data: {
-                labels: timeLabels,
-                datasets: [{
-                    label: 'Kelembaban Tanah 1 (%)',
-                    data: soil1Data,
-                    borderColor: '#8B4513',
-                    backgroundColor: 'rgba(139, 69, 19, 0.1)',
-                    borderWidth: 3,
-                    tension: 0.4,
-                    fill: true,
-                    pointBackgroundColor: '#8B4513',
-                    pointRadius: 4,
-                    pointHoverRadius: 6
-                }]
-            },
+            data: { labels: timeLabels, datasets: [{ label: 'Soil 2 (%)', data: soil2Data, borderColor: '#006400', backgroundColor: 'rgba(0,100,0,0.1)', borderWidth: 3, tension: 0.4, fill: true, pointRadius: 4, pointHoverRadius: 6 }] },
             options: chartOptions
         });
-
-        // Soil Moisture 2 Chart
-        const soil2Ctx = document.getElementById('soil2Chart').getContext('2d');
-        soil2Chart = new Chart(soil2Ctx, {
+        waterChart = new Chart(document.getElementById('waterChart').getContext('2d'), {
             type: 'line',
-            data: {
-                labels: timeLabels,
-                datasets: [{
-                    label: 'Kelembaban Tanah 2 (%)',
-                    data: soil2Data,
-                    borderColor: '#006400',
-                    backgroundColor: 'rgba(0, 100, 0, 0.1)',
-                    borderWidth: 3,
-                    tension: 0.4,
-                    fill: true,
-                    pointBackgroundColor: '#006400',
-                    pointRadius: 4,
-                    pointHoverRadius: 6
-                }]
-            },
-            options: chartOptions
-        });
-
-        // Water Level Chart
-        const waterCtx = document.getElementById('waterChart').getContext('2d');
-        waterChart = new Chart(waterCtx, {
-            type: 'line',
-            data: {
-                labels: timeLabels,
-                datasets: [{
-                    label: 'Level Air (%)',
-                    data: waterData,
-                    borderColor: '#36d9d6',
-                    backgroundColor: 'rgba(54, 217, 214, 0.1)',
-                    borderWidth: 3,
-                    tension: 0.4,
-                    fill: true,
-                    pointBackgroundColor: '#36d9d6',
-                    pointRadius: 4,
-                    pointHoverRadius: 6
-                }]
-            },
+            data: { labels: timeLabels, datasets: [{ label: 'Level Air (%)', data: waterData, borderColor: '#36d9d6', backgroundColor: 'rgba(54,217,214,0.1)', borderWidth: 3, tension: 0.4, fill: true, pointRadius: 4, pointHoverRadius: 6 }] },
             options: chartOptions
         });
     }
 
-    // ============================
-    // DATA GENERATION & FETCHING
-    // ============================
-    function generateSimulatedData() {
-        return {
-            temp: parseFloat((25 + Math.random() * 5 - 2.5).toFixed(1)),
-            hum: parseFloat((50 + Math.random() * 20 - 10).toFixed(1)),
-            soil1: Math.round(30 + Math.random() * 50),
-            soil2: Math.round(30 + Math.random() * 50),
-            water: Math.round(40 + Math.random() * 40)
-        };
+    // Fetch data (tanpa hum)
+    async function fetchDataFromESP32() {
+        try {
+            const response = await fetch(`${ESP32_BASE_URL}/status`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const data = await response.json();
+            state.esp32Reachable = true;
+            return {
+                temp: data.temp || 0,
+                soil1: data.soil1 || 0,
+                soil2: data.soil2 || 0,
+                water: data.water || 0,
+                pump1: data.pump1 || false,
+                pump2: data.pump2 || false
+            };
+        } catch (e) {
+            console.error('ESP32 fetch gagal:', e);
+            state.esp32Reachable = false;
+            return null;
+        }
     }
 
     async function fetchData() {
-        if (state.simulationMode) {
-            return new Promise(resolve => {
-                setTimeout(() => resolve(generateSimulatedData()), 300);
-            });
-        } else {
-            try {
-                const response = await fetch('http://192.168.1.100/data');
-                if (!response.ok) throw new Error('Gagal mengambil data');
-                return await response.json();
-            } catch (error) {
-                console.error('Error fetching data:', error);
-                return generateSimulatedData();
-            }
+        const esp32Data = await fetchDataFromESP32();
+        if (esp32Data) {
+            state.lastRealData = esp32Data;
+            state.pump1On = esp32Data.pump1;
+            state.pump2On = esp32Data.pump2;
+            updatePumpStatusUI(1, state.pump1On);
+            updatePumpStatusUI(2, state.pump2On);
+            return esp32Data;
         }
+        return state.lastRealData;
     }
 
-    // ============================
-    // UI UPDATE FUNCTIONS
-    // ============================
-    function updateValueWithAnimation(element, newValue) {
-        if (!element) return;
-        const oldValue = element.textContent;
-        if (oldValue !== String(newValue)) {
-            element.textContent = newValue;
-            element.style.animation = 'none';
-            element.offsetHeight;
-            element.style.animation = 'valueUpdate 0.8s ease';
-            setTimeout(() => {
-                element.style.animation = '';
-            }, 800);
-        } else {
-            element.textContent = newValue;
-        }
+    // UI Update (tanpa humidity)
+    function updateValueWithAnimation(el, val) {
+        if (!el) return;
+        if (el.textContent !== String(val)) {
+            el.textContent = val;
+            el.style.animation = 'none';
+            el.offsetHeight;
+            el.style.animation = 'valueUpdate 0.8s ease';
+            setTimeout(() => el.style.animation = '', 800);
+        } else el.textContent = val;
     }
 
-    function updateConditionMarkers(container, activeCondition) {
-        if (!container) return;
-        const markers = container.querySelectorAll('.condition-marker');
-        markers.forEach(marker => {
-            const condition = marker.getAttribute('data-condition');
-            if (condition === activeCondition) {
-                marker.classList.add('active');
-            } else {
-                marker.classList.remove('active');
-            }
+    function updateConditionMarkers(container, active) {
+        container?.querySelectorAll('.condition-marker').forEach(m => {
+            m.classList.toggle('active', m.dataset.condition === active);
         });
     }
 
-    function updatePumpStatusUI(pumpNumber, isOn) {
-        const statusId = pumpNumber === 1 ? 'pump1Status' : 'pump2Status';
-        const manualStatusId = pumpNumber === 1 ? 'pump1ManualStatus' : 'pump2ManualStatus';
-        
-        const statusEl = document.getElementById(statusId);
-        const manualStatusEl = document.getElementById(manualStatusId);
-        
-        const icon = isOn ? 'fa-circle' : 'fa-circle';
-        const color = isOn ? '#00cc66' : '#ccc';
-        const text = isOn ? 'Menyala' : 'Mati';
-        
-        if (statusEl) {
-            statusEl.innerHTML = `<i class="fas ${icon}" style="color: ${color};"></i> ${text}`;
-            statusEl.style.color = isOn ? '#00cc66' : '#999';
+    function updatePumpStatusUI(pump, on) {
+        const id1 = pump === 1 ? 'pump1Status' : 'pump2Status';
+        const id2 = pump === 1 ? 'pump1ManualStatus' : 'pump2ManualStatus';
+        const color = on ? '#00cc66' : '#ccc';
+        const text = on ? 'Menyala' : 'Mati';
+        const el1 = document.getElementById(id1);
+        if (el1) {
+            el1.innerHTML = `<i class="fas fa-circle" style="color:${color};"></i> ${text}`;
+            el1.style.color = on ? '#00cc66' : '#999';
         }
-        if (manualStatusEl) {
-            manualStatusEl.innerHTML = `<i class="fas ${icon}" style="color: ${color};"></i> ${text}`;
-            manualStatusEl.className = `pump-status ${isOn ? 'on' : 'off'}`;
+        const el2 = document.getElementById(id2);
+        if (el2) {
+            el2.innerHTML = `<i class="fas fa-circle" style="color:${color};"></i> ${text}`;
+            el2.className = `pump-status ${on ? 'on' : 'off'}`;
         }
     }
 
     function updateStatusIndicators(data) {
-        // Temperature
-        let tempCondition = 'normal';
-        if (data.temp < 20) {
-            document.getElementById('tempStatus').textContent = 'Dingin';
-            document.getElementById('tempStatus').style.color = '#4d96ff';
-            tempCondition = 'cold';
-        } else if (data.temp > 30) {
-            document.getElementById('tempStatus').textContent = 'Panas';
-            document.getElementById('tempStatus').style.color = '#ff6b6b';
-            tempCondition = 'hot';
-        } else {
-            document.getElementById('tempStatus').textContent = 'Normal';
-            document.getElementById('tempStatus').style.color = '#36d9d6';
-            tempCondition = 'normal';
-        }
-        updateConditionMarkers(document.querySelector('.temp-condition-markers'), tempCondition);
-
-        // Humidity
-        let humCondition = 'normal';
-        if (data.hum < 40) {
-            document.getElementById('humStatus').textContent = 'Kering';
-            document.getElementById('humStatus').style.color = '#ffa726';
-            humCondition = 'dry';
-        } else if (data.hum > 70) {
-            document.getElementById('humStatus').textContent = 'Lembab';
-            document.getElementById('humStatus').style.color = '#4d96ff';
-            humCondition = 'wet';
-        } else {
-            document.getElementById('humStatus').textContent = 'Normal';
-            document.getElementById('humStatus').style.color = '#36d9d6';
-            humCondition = 'normal';
-        }
-        updateConditionMarkers(document.querySelector('.hum-condition-markers'), humCondition);
+        // Temperature only
+        let cond = 'normal';
+        if (data.temp < 20) { document.getElementById('tempStatus').textContent = 'Dingin'; document.getElementById('tempStatus').style.color = '#4d96ff'; cond = 'cold'; }
+        else if (data.temp > 30) { document.getElementById('tempStatus').textContent = 'Panas'; document.getElementById('tempStatus').style.color = '#ff6b6b'; cond = 'hot'; }
+        else { document.getElementById('tempStatus').textContent = 'Normal'; document.getElementById('tempStatus').style.color = '#36d9d6'; }
+        updateConditionMarkers(document.querySelector('.temp-condition-markers'), cond);
 
         // Soil 1
-        updateSoilStatus('soil1', data.soil1, state.dryThreshold1, state.optimalThreshold1, 
+        updateSoilStatus('soil1', data.soil1, state.dryThreshold1, state.optimalThreshold1,
             document.querySelector('.soil-1 .soil-level-markers'));
-
         // Soil 2
         updateSoilStatus('soil2', data.soil2, state.dryThreshold2, state.optimalThreshold2,
             document.querySelector('.soil-2 .soil-level-markers'));
 
         // Water Level
-        const waterLevelFillEl = document.getElementById('waterLevelFill');
-        let waterCondition = 'normal';
+        const wf = document.getElementById('waterLevelFill');
+        let wcond = 'normal';
         if (data.water < 20) {
             document.getElementById('waterStatus').innerHTML = '<i class="fas fa-exclamation-triangle"></i> Rendah';
             document.getElementById('waterStatus').style.color = '#ff6b6b';
-            waterLevelFillEl.style.background = 'linear-gradient(90deg, #ff6b6b, #ffa726)';
-            waterCondition = 'low';
+            wf.style.background = 'linear-gradient(90deg, #ff6b6b, #ffa726)';
+            wcond = 'low';
         } else if (data.water > 80) {
             document.getElementById('waterStatus').innerHTML = '<i class="fas fa-check-circle"></i> Tinggi';
             document.getElementById('waterStatus').style.color = '#00cc66';
-            waterLevelFillEl.style.background = 'linear-gradient(90deg, #00cc66, #36d9d6)';
-            waterCondition = 'high';
+            wf.style.background = 'linear-gradient(90deg, #00cc66, #36d9d6)';
+            wcond = 'high';
         } else {
             document.getElementById('waterStatus').innerHTML = '<i class="fas fa-check-circle"></i> Normal';
             document.getElementById('waterStatus').style.color = '#36d9d6';
-            waterLevelFillEl.style.background = 'linear-gradient(90deg, #36d9d6, #4d96ff)';
-            waterCondition = 'normal';
+            wf.style.background = 'linear-gradient(90deg, #36d9d6, #4d96ff)';
         }
-        updateConditionMarkers(document.querySelector('.water-level-markers'), waterCondition);
+        updateConditionMarkers(document.querySelector('.water-level-markers'), wcond);
     }
 
-    function updateSoilStatus(prefix, value, dryThreshold, optimalThreshold, markersContainer) {
-        const statusEl = document.getElementById(`${prefix}Status`);
-        const recEl = document.getElementById(`${prefix}Recommendation`);
-        const levelFillEl = document.getElementById(`${prefix}LevelFill`);
-        
-        let condition = 'optimal';
-        if (value < dryThreshold) {
-            statusEl.textContent = 'Kering';
-            statusEl.style.color = '#D2691E';
-            recEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <span>Butuh penyiraman!</span>';
-            recEl.style.color = '#D2691E';
-            condition = 'dry';
-        } else if (value > optimalThreshold) {
-            statusEl.textContent = 'Basah';
-            statusEl.style.color = '#006400';
-            recEl.innerHTML = '<i class="fas fa-check-circle"></i> <span>Kelembaban cukup</span>';
-            recEl.style.color = '#006400';
-            condition = 'wet';
+    function updateSoilStatus(prefix, value, dry, optimal, markers) {
+        const st = document.getElementById(`${prefix}Status`);
+        const rec = document.getElementById(`${prefix}Recommendation`);
+        const fill = document.getElementById(`${prefix}LevelFill`);
+        let cond = 'optimal';
+        if (value < dry) {
+            st.textContent = 'Kering'; st.style.color = '#D2691E';
+            rec.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <span>Butuh penyiraman!</span>';
+            rec.style.color = '#D2691E'; cond = 'dry';
+        } else if (value > optimal) {
+            st.textContent = 'Basah'; st.style.color = '#006400';
+            rec.innerHTML = '<i class="fas fa-check-circle"></i> <span>Kelembaban cukup</span>';
+            rec.style.color = '#006400'; cond = 'wet';
         } else {
-            statusEl.textContent = 'Optimal';
-            statusEl.style.color = '#228B22';
-            recEl.innerHTML = '<i class="fas fa-check-circle"></i> <span>Kondisi ideal</span>';
-            recEl.style.color = '#228B22';
-            condition = 'optimal';
+            st.textContent = 'Optimal'; st.style.color = '#228B22';
+            rec.innerHTML = '<i class="fas fa-check-circle"></i> <span>Kondisi ideal</span>';
+            rec.style.color = '#228B22';
         }
-        
-        if (levelFillEl) {
-            levelFillEl.style.width = `${value}%`;
-        }
-        
-        updateConditionMarkers(markersContainer, condition);
+        if (fill) fill.style.width = `${value}%`;
+        updateConditionMarkers(markers, cond);
     }
 
-    // ============================
-    // WATERING CONTROL FUNCTIONS
-    // ============================
-    function addLogEntry(message, type = 'info') {
-        const logContent = document.getElementById('logContent');
-        if (!logContent) return;
-        
+    // Watering
+    function addLogEntry(msg, type='info') {
+        const log = document.getElementById('logContent');
         const entry = document.createElement('div');
-        const now = new Date();
-        const timeString = now.toLocaleTimeString('id-ID', { 
-            hour: '2-digit', 
-            minute: '2-digit', 
-            second: '2-digit' 
-        });
-        
+        const time = new Date().toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
         entry.className = `log-entry ${type}`;
-        entry.innerHTML = `
-            <span class="log-time">${timeString}</span>
-            <span class="log-message">${message}</span>
-        `;
-        
-        logContent.appendChild(entry);
-        logContent.scrollTop = logContent.scrollHeight;
-        
-        while (logContent.children.length > 50) {
-            logContent.removeChild(logContent.firstChild);
-        }
+        entry.innerHTML = `<span class="log-time">${time}</span><span class="log-message">${msg}</span>`;
+        log.appendChild(entry);
+        log.scrollTop = log.scrollHeight;
+        while (log.children.length > 50) log.firstChild.remove();
     }
 
-    function startWatering(pumpNumber) {
-        const isPumpOn = pumpNumber === 1 ? state.pump1On : state.pump2On;
-        const isWatering = pumpNumber === 1 ? state.isWatering1 : state.isWatering2;
-        
-        if (isWatering) {
-            addLogEntry(`⚠️ Pompa ${pumpNumber} sudah berjalan`, 'warning');
-            return;
-        }
-
-        const duration = pumpNumber === 1 ? state.wateringDuration1 : state.wateringDuration2;
-        
-        if (pumpNumber === 1) {
-            state.isWatering1 = true;
-            state.pump1On = true;
-        } else {
-            state.isWatering2 = true;
-            state.pump2On = true;
-        }
-        
-        updatePumpStatusUI(pumpNumber, true);
-        addLogEntry(`💧 Zona ${pumpNumber}: Penyiraman dimulai (${duration} detik)`, 'water-on');
-        
-        sendPumpCommand(pumpNumber, 'on');
-
-        const timer = setTimeout(() => {
-            stopWatering(pumpNumber);
-        }, duration * 1000);
-        
-        if (pumpNumber === 1) {
-            state.wateringTimer1 = timer;
-        } else {
-            state.wateringTimer2 = timer;
-        }
+    function sendPumpCommand(pump, cmd) {
+        return fetch(`${ESP32_BASE_URL}/pump${pump}?state=${cmd}`)
+            .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); console.log(`Pompa ${pump}: ${cmd}`); })
+            .catch(err => {
+                console.error(err);
+                if (mqttClient && state.mqttConnected) {
+                    mqttClient.publish(`tandon/pump${pump}/control`, cmd, { qos: 1 });
+                    console.log(`MQTT fallback: pompa ${pump} ${cmd}`);
+                } else throw err;
+            });
     }
 
-    function stopWatering(pumpNumber) {
-        const isPumpOn = pumpNumber === 1 ? state.pump1On : state.pump2On;
-        const isWatering = pumpNumber === 1 ? state.isWatering1 : state.isWatering2;
-        
-        if (!isWatering && !isPumpOn) return;
-        
-        if (pumpNumber === 1) {
-            state.isWatering1 = false;
-            state.pump1On = false;
-            if (state.wateringTimer1) {
-                clearTimeout(state.wateringTimer1);
-                state.wateringTimer1 = null;
+    function startWatering(pump) {
+        const isWatering = pump === 1 ? state.isWatering1 : state.isWatering2;
+        if (isWatering) { addLogEntry(`⚠️ Pompa ${pump} sudah berjalan`, 'warning'); return; }
+        const dur = pump === 1 ? state.wateringDuration1 : state.wateringDuration2;
+        sendPumpCommand(pump, 'on').then(() => {
+            if (pump === 1) { state.isWatering1 = true; state.pump1On = true; }
+            else { state.isWatering2 = true; state.pump2On = true; }
+            updatePumpStatusUI(pump, true);
+            addLogEntry(`💧 Zona ${pump}: Penyiraman dimulai (${dur} detik)`, 'water-on');
+            const timer = setTimeout(() => stopWatering(pump), dur * 1000);
+            if (pump === 1) state.wateringTimer1 = timer;
+            else state.wateringTimer2 = timer;
+        }).catch(e => addLogEntry(`❌ Gagal menyalakan pompa ${pump}: ${e.message}`, 'error'));
+    }
+
+    function stopWatering(pump) {
+        sendPumpCommand(pump, 'off').then(() => {
+            if (pump === 1) {
+                state.isWatering1 = false; state.pump1On = false;
+                if (state.wateringTimer1) { clearTimeout(state.wateringTimer1); state.wateringTimer1 = null; }
+            } else {
+                state.isWatering2 = false; state.pump2On = false;
+                if (state.wateringTimer2) { clearTimeout(state.wateringTimer2); state.wateringTimer2 = null; }
             }
-        } else {
-            state.isWatering2 = false;
-            state.pump2On = false;
-            if (state.wateringTimer2) {
-                clearTimeout(state.wateringTimer2);
-                state.wateringTimer2 = null;
-            }
-        }
-        
-        updatePumpStatusUI(pumpNumber, false);
-        addLogEntry(`💧 Zona ${pumpNumber}: Penyiraman selesai`, 'water-off');
-        sendPumpCommand(pumpNumber, 'off');
-    }
-
-    function sendPumpCommand(pumpNumber, command) {
-        if (state.simulationMode) {
-            console.log(`[SIMULASI] Pompa ${pumpNumber}: ${command}`);
-            return;
-        }
-        
-        try {
-            fetch(`http://192.168.1.100/pump${pumpNumber}?state=${command}`)
-                .catch(err => console.error(`Gagal mengirim perintah ke pompa ${pumpNumber}:`, err));
-        } catch (error) {
-            console.error(`Error sending pump ${pumpNumber} command:`, error);
-        }
+            updatePumpStatusUI(pump, false);
+            addLogEntry(`💧 Zona ${pump}: Penyiraman selesai`, 'water-off');
+        }).catch(e => addLogEntry(`❌ Gagal mematikan pompa ${pump}: ${e.message}`, 'error'));
     }
 
     function checkAutoWatering(data) {
         if (state.mode !== 'auto') return;
-        
-        // Check Zone 1
-        if (!state.isWatering1 && data.soil1 < state.dryThreshold1) {
-            addLogEntry(`🌱 Zona 1: Kelembaban ${data.soil1}% < ${state.dryThreshold1}%, penyiraman otomatis dimulai`, 'auto-water');
-            startWatering(1);
-        } else if (!state.isWatering1 && data.soil1 < state.dryThreshold1 + 10) {
-            addLogEntry(`⚠️ Zona 1: Kelembaban ${data.soil1}% mendekati batas kering (${state.dryThreshold1}%)`, 'warning');
-        }
-        
-        // Check Zone 2
-        if (!state.isWatering2 && data.soil2 < state.dryThreshold2) {
-            addLogEntry(`🌱 Zona 2: Kelembaban ${data.soil2}% < ${state.dryThreshold2}%, penyiraman otomatis dimulai`, 'auto-water');
-            startWatering(2);
-        } else if (!state.isWatering2 && data.soil2 < state.dryThreshold2 + 10) {
-            addLogEntry(`⚠️ Zona 2: Kelembaban ${data.soil2}% mendekati batas kering (${state.dryThreshold2}%)`, 'warning');
-        }
+        if (!state.isWatering1 && data.soil1 < state.dryThreshold1) { addLogEntry(`🌱 Zona 1 auto watering`, 'auto-water'); startWatering(1); }
+        else if (!state.isWatering1 && data.soil1 < state.dryThreshold1 + 10) addLogEntry(`⚠️ Zona 1 mendekati kering`, 'warning');
+        if (!state.isWatering2 && data.soil2 < state.dryThreshold2) { addLogEntry(`🌱 Zona 2 auto watering`, 'auto-water'); startWatering(2); }
+        else if (!state.isWatering2 && data.soil2 < state.dryThreshold2 + 10) addLogEntry(`⚠️ Zona 2 mendekati kering`, 'warning');
     }
 
-    // ============================
-    // MAIN DASHBOARD UPDATE
-    // ============================
+    // MQTT (tanpa humidity parsing)
+    function connectMQTT() {
+        if (mqttClient) { try { mqttClient.end(true); } catch(e) {} }
+        mqttClient = mqtt.connect(MQTT_BROKER, {
+            clientId: 'web_dashboard_' + Math.random().toString(16).substr(2,8),
+            clean: true, reconnectPeriod: 5000, connectTimeout: 10000
+        });
+        mqttClient.on('connect', () => {
+            state.mqttConnected = true;
+            mqttClient.subscribe(MQTT_TOPIC, err => { if (!err) addLogEntry('📡 Terhubung ke MQTT (EMQX)', 'info'); });
+        });
+        mqttClient.on('message', (topic, payload) => {
+            try {
+                let raw = payload.toString();
+                raw = raw.replace(/:nan([,}])/gi, ':null$1').replace(/:inf(?:inity)?([,}])/gi, ':null$1');
+                const json = JSON.parse(raw);
+                const realData = {
+                    temp: parseFloat(json.temp_C) || 0,
+                    soil1: parseInt(json.soil1_pct) || 0,
+                    soil2: parseInt(json.soil2_pct) || 0,
+                    water: parseFloat(json.level_pct) || 0,
+                    pump1: json.pump1 === true,
+                    pump2: json.pump2 === true
+                };
+                state.lastRealData = realData;
+                state.pump1On = realData.pump1;
+                state.pump2On = realData.pump2;
+                updatePumpStatusUI(1, state.pump1On);
+                updatePumpStatusUI(2, state.pump2On);
+                if (!state.esp32Reachable) updateDashboardWithData(realData);
+            } catch(e) { console.error('MQTT parse error:', e); }
+        });
+        mqttClient.on('error', () => state.mqttConnected = false);
+        mqttClient.on('close', () => state.mqttConnected = false);
+    }
+
+    // Dashboard update
+    function updateDashboardWithData(data) {
+        if (!data) return;
+        updateValueWithAnimation(document.getElementById('tempValue'), data.temp);
+        updateValueWithAnimation(document.getElementById('soil1Value'), data.soil1);
+        updateValueWithAnimation(document.getElementById('soil2Value'), data.soil2);
+        updateValueWithAnimation(document.getElementById('waterValue'), data.water);
+
+        document.getElementById('waterLevelFill').style.width = `${data.water}%`;
+        document.getElementById('soil1LevelFill').style.width = `${data.soil1}%`;
+        document.getElementById('soil2LevelFill').style.width = `${data.soil2}%`;
+        document.getElementById('tempGaugeFill').style.width = `${Math.min(data.temp * 2, 100)}%`;
+
+        updateStatusIndicators(data);
+        checkAutoWatering(data);
+
+        const time = new Date().toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+        timeLabels.push(time);
+        tempData.push(data.temp);
+        soil1Data.push(data.soil1);
+        soil2Data.push(data.soil2);
+        waterData.push(data.water);
+        const max = 20;
+        while (timeLabels.length > max) {
+            timeLabels.shift(); tempData.shift(); soil1Data.shift(); soil2Data.shift(); waterData.shift();
+        }
+        tempChart.update(); soil1Chart.update(); soil2Chart.update(); waterChart.update();
+
+        document.getElementById('lastUpdateTime').textContent = time;
+        state.dataCounter++;
+        document.getElementById('dataCounter').textContent = state.dataCounter;
+        state.uptime += state.updateInterval / 1000;
+        document.getElementById('uptime').textContent = Math.round(state.uptime);
+    }
+
     async function updateDashboard() {
-        try {
-            const data = await fetchData();
-            
-            // Update values
-            updateValueWithAnimation(document.getElementById('tempValue'), data.temp);
-            updateValueWithAnimation(document.getElementById('humValue'), data.hum);
-            updateValueWithAnimation(document.getElementById('soil1Value'), data.soil1);
-            updateValueWithAnimation(document.getElementById('soil2Value'), data.soil2);
-            updateValueWithAnimation(document.getElementById('waterValue'), data.water);
-            
-            // Update gauge bars
-            document.getElementById('waterLevelFill').style.width = `${data.water}%`;
-            document.getElementById('soil1LevelFill').style.width = `${data.soil1}%`;
-            document.getElementById('soil2LevelFill').style.width = `${data.soil2}%`;
-            document.getElementById('tempGaugeFill').style.width = `${Math.min(data.temp * 2, 100)}%`;
-            document.getElementById('humGaugeFill').style.width = `${data.hum}%`;
-            
-            // Update status indicators
-            updateStatusIndicators(data);
-            
-            // Check auto watering
-            checkAutoWatering(data);
-            
-            // Update charts
-            const now = new Date();
-            const timeString = now.toLocaleTimeString('id-ID', { 
-                hour: '2-digit', 
-                minute: '2-digit', 
-                second: '2-digit' 
-            });
-            
-            timeLabels.push(timeString);
-            tempData.push(data.temp);
-            humData.push(data.hum);
-            soil1Data.push(data.soil1);
-            soil2Data.push(data.soil2);
-            waterData.push(data.water);
-            
-            const maxDataPoints = 20;
-            if (timeLabels.length > maxDataPoints) {
-                timeLabels.shift();
-                tempData.shift();
-                humData.shift();
-                soil1Data.shift();
-                soil2Data.shift();
-                waterData.shift();
-            }
-            
-            tempChart.update();
-            humChart.update();
-            soil1Chart.update();
-            soil2Chart.update();
-            waterChart.update();
-            
-            // Update metadata
-            document.getElementById('lastUpdateTime').textContent = timeString;
-            state.dataCounter++;
-            document.getElementById('dataCounter').textContent = state.dataCounter;
-            state.uptime += state.updateInterval / 1000;
-            document.getElementById('uptime').textContent = Math.round(state.uptime);
-            
-        } catch (error) {
-            console.error('Error updating dashboard:', error);
-        }
+        const data = await fetchData();
+        if (data) updateDashboardWithData(data);
     }
 
-    // ============================
-    // SETUP FUNCTIONS
-    // ============================
+    // Setup UI
     function setupModeControl() {
         const autoBtn = document.getElementById('autoModeBtn');
         const manualBtn = document.getElementById('manualModeBtn');
@@ -615,117 +371,58 @@ document.addEventListener('DOMContentLoaded', function() {
 
         function setMode(mode) {
             state.mode = mode;
-            
-            [autoBtn, manualBtn].forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.mode === mode);
-            });
-            
+            autoBtn.classList.toggle('active', mode === 'auto');
+            manualBtn.classList.toggle('active', mode === 'manual');
             manualControls.style.display = mode === 'manual' ? 'block' : 'none';
             autoSettings.style.display = mode === 'auto' ? 'block' : 'none';
-            
-            if (mode === 'auto') {
-                modeStatus.textContent = 'Otomatis';  // Tanpa icon
-                modeStatus.style.color = '#43c51e';
-                addLogEntry('Mode berubah ke Otomatis', 'mode-change');
-                if (state.pump1On) stopWatering(1);
-                if (state.pump2On) stopWatering(2);
-            } else {
-                modeStatus.textContent = 'Manual';    // Tanpa icon
-                modeStatus.style.color = '#ff2626';
-                addLogEntry('Mode berubah ke Manual', 'mode-change');
-            }
+            modeStatus.textContent = mode === 'auto' ? 'Otomatis' : 'Manual';
+            modeStatus.style.color = mode === 'auto' ? '#43c51e' : '#ff2626';
+            addLogEntry(`Mode: ${mode === 'auto' ? 'Otomatis' : 'Manual'}`, 'mode-change');
         }
 
         autoBtn.addEventListener('click', () => setMode('auto'));
         manualBtn.addEventListener('click', () => setMode('manual'));
-        setMode('auto');
+        setMode('manual'); // DEFAULT MANUAL
     }
 
     function setupManualControls() {
         document.querySelectorAll('.pump-btn').forEach(btn => {
             btn.addEventListener('click', function() {
-                const pump = parseInt(this.dataset.pump);
-                const action = this.dataset.action;
-                
                 if (state.mode !== 'manual') {
-                    addLogEntry(`⚠️ Ganti ke mode manual untuk kontrol manual`, 'warning');
+                    addLogEntry('⚠️ Ganti ke mode manual terlebih dahulu', 'warning');
                     return;
                 }
-                
-                if (action === 'on') {
-                    startWatering(pump);
-                } else if (action === 'off') {
-                    stopWatering(pump);
-                }
+                const pump = parseInt(this.dataset.pump);
+                const action = this.dataset.action;
+                action === 'on' ? startWatering(pump) : stopWatering(pump);
             });
         });
     }
 
     function setupAutoSettings() {
-        // Zone 1
-        const dry1 = document.getElementById('dryThreshold1');
-        const opt1 = document.getElementById('optimalThreshold1');
-        const dur1 = document.getElementById('wateringDuration1');
-
-        dry1.addEventListener('input', function() {
-            const val = parseInt(this.value);
-            state.dryThreshold1 = val;
-            document.getElementById('dryThresholdValue1').textContent = val + '%';
-            if (val > state.optimalThreshold1) {
-                opt1.value = val + 10;
-                state.optimalThreshold1 = val + 10;
-                document.getElementById('optimalThresholdValue1').textContent = (val + 10) + '%';
-            }
+        document.getElementById('dryThreshold1').addEventListener('input', function() {
+            state.dryThreshold1 = parseInt(this.value);
+            document.getElementById('dryThresholdValue1').textContent = this.value + '%';
         });
-
-        opt1.addEventListener('input', function() {
-            const val = parseInt(this.value);
-            state.optimalThreshold1 = val;
-            document.getElementById('optimalThresholdValue1').textContent = val + '%';
-            if (val < state.dryThreshold1) {
-                dry1.value = val - 10;
-                state.dryThreshold1 = val - 10;
-                document.getElementById('dryThresholdValue1').textContent = (val - 10) + '%';
-            }
+        document.getElementById('optimalThreshold1').addEventListener('input', function() {
+            state.optimalThreshold1 = parseInt(this.value);
+            document.getElementById('optimalThresholdValue1').textContent = this.value + '%';
         });
-
-        dur1.addEventListener('input', function() {
-            const val = parseInt(this.value);
-            state.wateringDuration1 = val;
-            document.getElementById('wateringDurationValue1').textContent = val + ' detik';
+        document.getElementById('wateringDuration1').addEventListener('input', function() {
+            state.wateringDuration1 = parseInt(this.value);
+            document.getElementById('wateringDurationValue1').textContent = this.value + ' detik';
         });
-
-        // Zone 2
-        const dry2 = document.getElementById('dryThreshold2');
-        const opt2 = document.getElementById('optimalThreshold2');
-        const dur2 = document.getElementById('wateringDuration2');
-
-        dry2.addEventListener('input', function() {
-            const val = parseInt(this.value);
-            state.dryThreshold2 = val;
-            document.getElementById('dryThresholdValue2').textContent = val + '%';
-            if (val > state.optimalThreshold2) {
-                opt2.value = val + 10;
-                state.optimalThreshold2 = val + 10;
-                document.getElementById('optimalThresholdValue2').textContent = (val + 10) + '%';
-            }
+        document.getElementById('dryThreshold2').addEventListener('input', function() {
+            state.dryThreshold2 = parseInt(this.value);
+            document.getElementById('dryThresholdValue2').textContent = this.value + '%';
         });
-
-        opt2.addEventListener('input', function() {
-            const val = parseInt(this.value);
-            state.optimalThreshold2 = val;
-            document.getElementById('optimalThresholdValue2').textContent = val + '%';
-            if (val < state.dryThreshold2) {
-                dry2.value = val - 10;
-                state.dryThreshold2 = val - 10;
-                document.getElementById('dryThresholdValue2').textContent = (val - 10) + '%';
-            }
+        document.getElementById('optimalThreshold2').addEventListener('input', function() {
+            state.optimalThreshold2 = parseInt(this.value);
+            document.getElementById('optimalThresholdValue2').textContent = this.value + '%';
         });
-
-        dur2.addEventListener('input', function() {
-            const val = parseInt(this.value);
-            state.wateringDuration2 = val;
-            document.getElementById('wateringDurationValue2').textContent = val + ' detik';
+        document.getElementById('wateringDuration2').addEventListener('input', function() {
+            state.wateringDuration2 = parseInt(this.value);
+            document.getElementById('wateringDurationValue2').textContent = this.value + ' detik';
         });
     }
 
@@ -737,98 +434,46 @@ document.addEventListener('DOMContentLoaded', function() {
                 window.updateIntervalId = setInterval(updateDashboard, state.updateInterval);
             }
         });
-
-        document.getElementById('simulationToggle').addEventListener('change', function() {
-            state.simulationMode = this.checked;
-            const statusEl = document.getElementById('simulationStatus');
-            statusEl.textContent = state.simulationMode ? 'Aktif' : 'Nonaktif';
-            statusEl.style.color = state.simulationMode ? '#0077ff' : '#666';
-            addLogEntry(`🔧 Mode simulasi ${state.simulationMode ? 'Aktif' : 'Nonaktif'}`, 'mode-change');
-        });
-
         document.getElementById('refreshBtn').addEventListener('click', updateDashboard);
-
-        document.getElementById('resetBtn').addEventListener('click', function() {
-            timeLabels = [];
-            tempData = [];
-            humData = [];
-            soil1Data = [];
-            soil2Data = [];
-            waterData = [];
-            
-            tempChart.update();
-            humChart.update();
-            soil1Chart.update();
-            soil2Chart.update();
-            waterChart.update();
-            
-            state.dataCounter = 0;
-            document.getElementById('dataCounter').textContent = state.dataCounter;
-            state.uptime = 0;
-            document.getElementById('uptime').textContent = state.uptime;
-            
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            timeLabels.length = 0; tempData.length = 0; soil1Data.length = 0; soil2Data.length = 0; waterData.length = 0;
+            tempChart.update(); soil1Chart.update(); soil2Chart.update(); waterChart.update();
+            state.dataCounter = 0; document.getElementById('dataCounter').textContent = '0';
+            state.uptime = 0; document.getElementById('uptime').textContent = '0';
             addLogEntry('🔄 Data grafik direset', 'info');
         });
+        setInterval(() => {
+            const el = document.getElementById('mqttStatus');
+            if (state.esp32Reachable) {
+                el.innerHTML = '<i class="fas fa-wifi"></i> ESP32 Online';
+                el.style.color = '#00cc66';
+            } else if (state.mqttConnected) {
+                el.innerHTML = '<i class="fas fa-cloud"></i> MQTT Terhubung';
+                el.style.color = '#36d9d6';
+            } else {
+                el.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Terputus';
+                el.style.color = '#ff6b6b';
+            }
+        }, 2000);
     }
 
-    // ============================
-    // INITIALIZATION
-    // ============================
-    function initializeDashboard() {
-        if (!localStorage.getItem('isLoggedIn')) {
-            window.location.href = 'login.html';
-            return;
-        }
-
+    // Init
+    function initDashboard() {
+        if (!localStorage.getItem('isLoggedIn')) { window.location.href = 'login.html'; return; }
         displayUsername();
         setupLogout();
         setupAutoLogout();
-        
         initCharts();
-        setupModeControl();
+        setupModeControl();       // ini sudah set manual default
         setupManualControls();
         setupAutoSettings();
         setupCommonControls();
-        
         updateDashboard();
         window.updateIntervalId = setInterval(updateDashboard, state.updateInterval);
-        
-        addLogEntry('🚀 Smart Greenhouse Dual Control siap digunakan', 'info');
-        addLogEntry(`🌱 Mode: ${state.mode === 'auto' ? 'Otomatis' : 'Manual'}`, 'mode-change');
-        addLogEntry(`🔧 Zona 1 - Kering: ${state.dryThreshold1}% | Optimal: ${state.optimalThreshold1}%`, 'info');
-        addLogEntry(`🔧 Zona 2 - Kering: ${state.dryThreshold2}% | Optimal: ${state.optimalThreshold2}%`, 'info');
-        
-        console.log('Smart Greenhouse Dual Control loaded successfully!');
+        connectMQTT();
+        addLogEntry('🚀 Dashboard siap (data real, manual default)', 'info');
+        addLogEntry(`📡 ESP32 IP: ${ESP32_IP}`, 'info');
     }
 
-    // ============================
-    // LOAD DUMMY DATA
-    // ============================
-    function loadDummyData() {
-        for (let i = 0; i < 5; i++) {
-            const dummy = generateSimulatedData();
-            const time = new Date();
-            time.setMinutes(time.getMinutes() - (5 - i));
-            
-            timeLabels.push(time.toLocaleTimeString('id-ID', { 
-                hour: '2-digit', 
-                minute: '2-digit' 
-            }));
-            tempData.push(dummy.temp);
-            humData.push(dummy.hum);
-            soil1Data.push(dummy.soil1);
-            soil2Data.push(dummy.soil2);
-            waterData.push(dummy.water);
-        }
-        
-        tempChart.update();
-        humChart.update();
-        soil1Chart.update();
-        soil2Chart.update();
-        waterChart.update();
-    }
-
-    // Start
-    initializeDashboard();
-    setTimeout(loadDummyData, 500);
+    initDashboard();
 });
