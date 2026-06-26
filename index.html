@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP32 Web Dashboard Monitoring</title>
+    <title>ESP32 Web Dashboard - Smart Greenhouse Dual Sensor</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -13,8 +13,8 @@
         <!-- Header -->
         <div class="header">
             <div class="header-left">
-                <h1><i class="fas fa-microchip"></i> ESP32 Web Dashboard Monitoring</h1>
-                <p class="subtitle">Sistem Monitoring Secara Real Time Pada Mini Green House</p>
+                <h1>Monitoring System Realtime Mini Greenhouse</h1>
+                <p class="subtitle">Tugas Akhir Teknik Elektro 2026</p>
             </div>
             <div class="header-right">
                 <div class="user-info">
@@ -93,37 +93,91 @@
                 </div>
             </div>
 
-            <!-- Soil Moisture Card -->
-            <div class="dashboard-card soil-card">
+            <!-- Soil Moisture 1 Card -->
+            <div class="dashboard-card soil-card soil-1">
                 <div class="card-header">
                     <div class="card-icon">
                         <i class="fas fa-seedling"></i>
                     </div>
-                    <div class="card-title">Kelembaban Tanah</div>
+                    <div class="card-title">Kelembaban Tanah 1</div>
                 </div>
                 <div class="card-content">
                     <div class="main-value">
-                        <span id="soilValue">--</span>
+                        <span id="soil1Value">--</span>
                         <span class="unit">%</span>
                     </div>
                     <div class="additional-info">
                         <div class="info-item">
                             <span class="info-label">Status:</span>
-                            <span class="info-value" id="soilStatus">Loading...</span>
+                            <span class="info-value" id="soil1Status">Loading...</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Kebutuhan:</span>
+                            <span class="info-value" id="soil1Recommendation">
+                                <i class="fas fa-info-circle"></i>
+                                <span>Loading...</span>
+                            </span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Pompa 1:</span>
+                            <span class="info-value" id="pump1Status">
+                                <i class="fas fa-circle" style="color: #ccc;"></i> Mati
+                            </span>
                         </div>
                     </div>
                     <div class="soil-moisture-container">
                         <div class="soil-level-bar">
-                            <div class="soil-level-fill" id="soilLevelFill"></div>
+                            <div class="soil-level-fill" id="soil1LevelFill"></div>
                         </div>
                         <div class="soil-level-markers">
                             <span class="condition-marker" data-condition="dry">Kering</span>
-                            <span class="condition-marker" data-condition="optimal">Optimal</span>
+                            <span class="condition-marker" data-condition="optimal">Lembab</span>
                             <span class="condition-marker" data-condition="wet">Basah</span>
                         </div>
-                        <div class="soil-recommendation" id="soilRecommendation">
-                            <i class="fas fa-info-circle"></i>
-                            <span>Loading...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Soil Moisture 2 Card -->
+            <div class="dashboard-card soil-card soil-2">
+                <div class="card-header">
+                    <div class="card-icon">
+                        <i class="fas fa-seedling"></i>
+                    </div>
+                    <div class="card-title">Kelembaban Tanah 2</div>
+                </div>
+                <div class="card-content">
+                    <div class="main-value">
+                        <span id="soil2Value">--</span>
+                        <span class="unit">%</span>
+                    </div>
+                    <div class="additional-info">
+                        <div class="info-item">
+                            <span class="info-label">Status:</span>
+                            <span class="info-value" id="soil2Status">Loading...</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Kebutuhan:</span>
+                            <span class="info-value" id="soil2Recommendation">
+                                <i class="fas fa-info-circle"></i>
+                                <span>Loading...</span>
+                            </span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Pompa 2:</span>
+                            <span class="info-value" id="pump2Status">
+                                <i class="fas fa-circle" style="color: #ccc;"></i> Mati
+                            </span>
+                        </div>
+                    </div>
+                    <div class="soil-moisture-container">
+                        <div class="soil-level-bar">
+                            <div class="soil-level-fill" id="soil2LevelFill"></div>
+                        </div>
+                        <div class="soil-level-markers">
+                            <span class="condition-marker" data-condition="dry">Kering</span>
+                            <span class="condition-marker" data-condition="optimal">Lembab</span>
+                            <span class="condition-marker" data-condition="wet">Basah</span>
                         </div>
                     </div>
                 </div>
@@ -184,13 +238,23 @@
                 </div>
             </div>
 
-            <!-- Soil Moisture Chart -->
+            <!-- Soil Moisture 1 Chart -->
             <div class="chart-card">
                 <div class="chart-header">
-                    <h3><i class="fas fa-chart-line"></i> Grafik Kelembaban Tanah</h3>
+                    <h3><i class="fas fa-chart-line"></i> Grafik Kelembaban Tanah 1</h3>
                 </div>
                 <div class="chart-wrapper">
-                    <canvas id="soilChart"></canvas>
+                    <canvas id="soil1Chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Soil Moisture 2 Chart -->
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h3><i class="fas fa-chart-line"></i> Grafik Kelembaban Tanah 2</h3>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="soil2Chart"></canvas>
                 </div>
             </div>
 
@@ -207,58 +271,184 @@
 
         <!-- Control Panel -->
         <div class="control-panel">
-            <h3><i class="fas fa-cogs"></i> Panel Kontrol</h3>
-            <div class="controls-grid">
-                <div class="control-item">
-                    <label class="control-label">Interval Pembaruan Data</label>
-                    <div class="control-input">
-                        <select id="updateInterval">
-                            <option value="1000">1 detik</option>
-                            <option value="2000" selected>2 detik</option>
-                            <option value="5000">5 detik</option>
-                            <option value="10000">10 detik</option>
-                        </select>
+            <h3><i class="fas fa-cogs"></i> Panel Kontrol Penyiraman Dual Zona</h3>
+            
+            <!-- Mode Control -->
+            <div class="mode-control">
+                <div class="mode-selection">
+                    <h4>Mode Penyiraman</h4>
+                    <div class="mode-buttons">
+                        <button class="mode-btn active" data-mode="auto" id="autoModeBtn">Otomatis</button>
+                        <button class="mode-btn" data-mode="manual" id="manualModeBtn">Manual</button>
                     </div>
                 </div>
-                <div class="control-item">
-                    <label class="control-label">Mode Simulasi</label>
+                <div class="mode-status">
+                    <span class="status-label">Status Mode:</span>
+                    <span class="status-value" id="currentModeStatus">Otomatis</span>
+                </div>
+            </div>
+
+            <!-- Manual Controls - Zone 1 -->
+            <div class="manual-controls" id="manualControls" style="display: none;">
+                <h4 style="color: #8B4513; margin-bottom: 15px;">
+                    <i class="fas fa-seedling"></i> Zona 1 - Kontrol Manual
+                </h4>
+                <div class="manual-control-item">
+                    <label class="control-label">Pompa 1</label>
                     <div class="control-input">
-                        <label class="switch">
-                            <input type="checkbox" id="simulationToggle" checked>
-                            <span class="slider"></span>
-                        </label>
-                        <span class="switch-label" id="simulationStatus">Aktif</span>
+                        <button class="btn btn-success pump-btn" data-pump="1" data-action="on">
+                            <i class="fas fa-play"></i> Nyalakan
+                        </button>
+                        <button class="btn btn-danger pump-btn" data-pump="1" data-action="off">
+                            <i class="fas fa-stop"></i> Matikan
+                        </button>
                     </div>
                 </div>
-                <div class="control-item">
-                    <label class="control-label">Data Counter</label>
+                <div class="manual-control-item">
+                    <label class="control-label">Status Pompa 1</label>
                     <div class="control-input">
-                        <span id="dataCounter">0</span> data points
+                        <span class="pump-status" id="pump1ManualStatus">
+                            <i class="fas fa-circle" style="color: #ccc;"></i> Mati
+                        </span>
                     </div>
                 </div>
-                <div class="control-item">
-                    <label class="control-label">Uptime</label>
+
+                <hr style="margin: 20px 0; border-color: #e8f0ff;">
+
+                <h4 style="color: #006400; margin-bottom: 15px;">
+                    <i class="fas fa-seedling"></i> Zona 2 - Kontrol Manual
+                </h4>
+                <div class="manual-control-item">
+                    <label class="control-label">Pompa 2</label>
                     <div class="control-input">
-                        <span id="uptime">0</span> detik
+                        <button class="btn btn-success pump-btn" data-pump="2" data-action="on">
+                            <i class="fas fa-play"></i> Nyalakan
+                        </button>
+                        <button class="btn btn-danger pump-btn" data-pump="2" data-action="off">
+                            <i class="fas fa-stop"></i> Matikan
+                        </button>
+                    </div>
+                </div>
+                <div class="manual-control-item">
+                    <label class="control-label">Status Pompa 2</label>
+                    <div class="control-input">
+                        <span class="pump-status" id="pump2ManualStatus">
+                            <i class="fas fa-circle" style="color: #ccc;"></i> Mati
+                        </span>
                     </div>
                 </div>
             </div>
-            <div style="margin-top: 20px; display: flex; gap: 15px;">
-                <button class="btn btn-primary" id="refreshBtn">
-                    <i class="fas fa-sync-alt"></i> Refresh Data
-                </button>
-                <button class="btn btn-secondary" id="resetBtn">
-                    <i class="fas fa-trash"></i> Reset Data
-                </button>
+
+            <!-- Auto Settings -->
+            <div class="auto-settings" id="autoSettings">
+                <div class="settings-grid">
+                    <!-- Zone 1 Settings -->
+                    <div class="settings-zone">
+                        <h4 style="color: #8B4513; margin-bottom: 10px;">
+                            <i class="fas fa-seedling"></i> Zona 1
+                        </h4>
+                        <div class="control-item">
+                            <label class="control-label">Batas Kering</label>
+                            <div class="control-input">
+                                <input type="range" id="dryThreshold1" min="0" max="50" value="30">
+                                <span id="dryThresholdValue1">30%</span>
+                            </div>
+                        </div>
+                        <div class="control-item">
+                            <label class="control-label">Batas Basah </label>
+                            <div class="control-input">
+                                <input type="range" id="optimalThreshold1" min="30" max="80" value="60">
+                                <span id="optimalThresholdValue1">60%</span>
+                            </div>
+                        </div>
+                        <div class="control-item">
+                            <label class="control-label">Durasi Penyiraman</label>
+                            <div class="control-input">
+                                <input type="range" id="wateringDuration1" min="5" max="60" value="15">
+                                <span id="wateringDurationValue1">15 detik</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Zone 2 Settings -->
+                    <div class="settings-zone">
+                        <h4 style="color: #006400; margin-bottom: 10px;">
+                            <i class="fas fa-seedling"></i> Zona 2
+                        </h4>
+                        <div class="control-item">
+                            <label class="control-label">Batas Kering</label>
+                            <div class="control-input">
+                                <input type="range" id="dryThreshold2" min="0" max="50" value="30">
+                                <span id="dryThresholdValue2">30%</span>
+                            </div>
+                        </div>
+                        <div class="control-item">
+                            <label class="control-label">Batas Basah</label>
+                            <div class="control-input">
+                                <input type="range" id="optimalThreshold2" min="30" max="80" value="60">
+                                <span id="optimalThresholdValue2">60%</span>
+                            </div>
+                        </div>
+                        <div class="control-item">
+                            <label class="control-label">Durasi Penyiraman</label>
+                            <div class="control-input">
+                                <input type="range" id="wateringDuration2" min="5" max="60" value="15">
+                                <span id="wateringDurationValue2">15 detik</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Common Controls -->
+            <div class="common-controls">
+                <div class="controls-grid">
+                    <div class="control-item">
+                        <label class="control-label">Interval Pembaruan Data</label>
+                        <div class="control-input">
+                            <select id="updateInterval">
+                                <option value="1000">1 detik</option>
+                                <option value="2000" selected>2 detik</option>
+                                <option value="5000">5 detik</option>
+                                <option value="10000">10 detik</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="control-item">
+                        <label class="control-label">Mode Simulasi</label>
+                        <div class="control-input">
+                            <label class="switch">
+                                <input type="checkbox" id="simulationToggle" checked>
+                                <span class="slider"></span>
+                            </label>
+                            <span class="switch-label" id="simulationStatus">Aktif</span>
+                        </div>
+                    </div>
+        
+                </div>
+                <div style="margin-top: 20px; display: flex; gap: 15px; flex-wrap: wrap;">
+                    <button class="btn btn-primary" id="refreshBtn">
+                        <i class="fas fa-sync-alt"></i> Refresh Data
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Log Container -->
+        <div class="log-container">
+            <h3><i class="fas fa-history"></i> Log Aktivitas Penyiraman</h3>
+            <div class="log-content" id="logContent">
+                <div class="log-entry">
+                    <span class="log-time">--:--:--</span>
+                    <span class="log-message">Sistem siap digunakan</span>
+                </div>
             </div>
         </div>
 
         <!-- Footer -->
         <div class="footer">
-            <p>&copy; 2026 ESP32 Web Dashboard Monitoring</p>
+            <p>&copy; 2026 Greenhouse Monitoring System</p>
             <div class="footer-info">
-                Terakhir diperbarui: <span id="lastUpdateTime">--:--:--</span>
-            </div>
         </div>
     </div>
 
