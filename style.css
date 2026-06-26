@@ -1,4 +1,4 @@
-/* Reset dan Base Styles */
+/* Reset and Base Styles */
 * {
     margin: 0;
     padding: 0;
@@ -26,6 +26,8 @@ body {
     margin-bottom: 30px;
     padding-bottom: 20px;
     border-bottom: 1px solid rgba(0, 119, 255, 0.1);
+    flex-wrap: wrap;
+    gap: 15px;
 }
 
 .header-left h1 {
@@ -49,7 +51,6 @@ body {
     align-items: center;
 }
 
-/* CSS untuk user info dan logout */
 .user-info {
     display: flex;
     align-items: center;
@@ -88,35 +89,6 @@ body {
     transform: scale(1.1);
 }
 
-.connection-status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: white;
-    padding: 8px 15px;
-    border-radius: 20px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-}
-
-.status-indicator {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-}
-
-.status-indicator.connected {
-    background-color: #00cc66;
-    box-shadow: 0 0 8px #00cc66;
-}
-
-.last-update {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 14px;
-    color: #666;
-}
-
 /* Dashboard Grid */
 .dashboard-grid {
     display: grid;
@@ -146,8 +118,12 @@ body {
     border-top: 4px solid #4d96ff;
 }
 
-.soil-card {
-    border-top: 4px solid #8B4513; /* Warna coklat tanah */
+.soil-1 {
+    border-top: 4px solid #8B4513;
+}
+
+.soil-2 {
+    border-top: 4px solid #006400;
 }
 
 .water-card {
@@ -181,9 +157,14 @@ body {
     color: #4d96ff;
 }
 
-.soil-card .card-icon {
+.soil-1 .card-icon {
     background-color: rgba(139, 69, 19, 0.1);
     color: #8B4513;
+}
+
+.soil-2 .card-icon {
+    background-color: rgba(0, 100, 0, 0.1);
+    color: #006400;
 }
 
 .water-card .card-icon {
@@ -244,6 +225,8 @@ body {
 .info-item {
     display: flex;
     justify-content: space-between;
+    align-items: center;
+    padding: 2px 0;
 }
 
 .info-label {
@@ -256,7 +239,7 @@ body {
     font-size: 14px;
 }
 
-/* ========== STYLE UNTUK GAUGE BARS ========== */
+/* Gauge Bars */
 .temp-gauge-container, .hum-gauge-container, .soil-moisture-container, .water-level-container {
     margin-top: 20px;
 }
@@ -287,7 +270,7 @@ body {
 
 .temp-gauge-fill, .hum-gauge-fill, .soil-level-fill, .water-level-fill {
     height: 100%;
-    width: 50%; /* Nilai default */
+    width: 50%;
     background: rgba(255, 255, 255, 0.3);
     border-radius: 10px;
     transition: width 1s ease;
@@ -314,17 +297,7 @@ body {
     100% { transform: translateX(100%); }
 }
 
-@keyframes soil-shimmer {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(100%); }
-}
-
-@keyframes water-shimmer {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(100%); }
-}
-
-.soil-level-markers, .temp-condition-markers, .hum-condition-markers, .water-level-markers, .temp-gauge-markers, .hum-gauge-markers {
+.soil-level-markers, .temp-condition-markers, .hum-condition-markers, .water-level-markers {
     display: flex;
     justify-content: space-between;
     font-size: 12px;
@@ -401,107 +374,6 @@ body {
     color: #00cc66;
 }
 
-.soil-recommendation {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 14px;
-}
-
-/* Status warna untuk kelembaban tanah */
-.soil-dry {
-    color: #D2691E !important;
-}
-
-.soil-optimal {
-    color: #228B22 !important;
-}
-
-.soil-wet {
-    color: #006400 !important;
-}
-
-/* Water Level Bar */
-.water-level-container {
-    margin-top: 20px;
-}
-
-.water-level-bar {
-    height: 24px;
-    background: #e8f0ff;
-    border-radius: 12px;
-    overflow: hidden;
-    margin-bottom: 8px;
-    position: relative;
-}
-
-.water-level-fill {
-    height: 100%;
-    width: 0%;
-    background: linear-gradient(90deg, #36d9d6, #4d96ff);
-    border-radius: 12px;
-    transition: width 1s ease;
-    position: relative;
-    overflow: hidden;
-}
-
-.water-level-fill::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: linear-gradient(90deg, 
-        transparent, 
-        rgba(255, 255, 255, 0.4) 50%, 
-        transparent);
-    animation: water-shimmer 2s infinite;
-}
-
-@keyframes water-shimmer {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(100%); }
-}
-
-.water-level-markers {
-    display: flex;
-    justify-content: space-between;
-    font-size: 12px;
-    color: #888;
-}
-
-/* Card Footer */
-.card-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-top: 15px;
-    border-top: 1px solid #f0f0f0;
-    font-size: 14px;
-}
-
-.trend {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-}
-
-.trend-up {
-    color: #ff6b6b;
-}
-
-.trend-down {
-    color: #4d96ff;
-}
-
-.water-status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: #36d9d6;
-}
-
 /* Charts Container */
 .charts-container {
     display: grid;
@@ -537,31 +409,6 @@ body {
     gap: 10px;
 }
 
-.chart-controls {
-    display: flex;
-    gap: 10px;
-}
-
-.chart-btn {
-    padding: 6px 12px;
-    background: #f0f5ff;
-    border: 1px solid #d0ddff;
-    border-radius: 6px;
-    font-size: 14px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.chart-btn:hover {
-    background: #e1ebff;
-}
-
-.chart-btn.active {
-    background: #0077ff;
-    color: white;
-    border-color: #0077ff;
-}
-
 .chart-wrapper {
     height: 300px;
     position: relative;
@@ -585,15 +432,89 @@ body {
     color: #0077ff;
 }
 
-.controls-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 25px;
+/* Mode Control */
+.mode-control {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    background: #f8faff;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 15px;
 }
 
-.control-item {
+.mode-selection h4 {
+    margin-bottom: 10px;
+    font-size: 14px;
+    color: #666;
+}
+
+.mode-buttons {
     display: flex;
-    flex-direction: column;
+    gap: 10px;
+}
+
+.mode-btn {
+    padding: 10px 25px;
+    border: 2px solid #d0ddff;
+    border-radius: 10px;
+    background: white;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-size: 14px;
+}
+
+.mode-btn.active {
+    background: #0077ff;
+    color: white;
+    border-color: #0077ff;
+    box-shadow: 0 4px 12px rgba(0, 119, 255, 0.3);
+}
+
+.mode-btn:not(.active):hover {
+    background: #f0f5ff;
+    border-color: #0077ff;
+}
+
+.mode-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 16px;
+}
+
+.status-label {
+    color: #666;
+    font-weight: 500;
+}
+
+.status-value {
+    font-weight: 700;
+    color: #0077ff;
+    padding: 5px 15px;
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+/* Manual Controls */
+.manual-controls {
+    background: #f8faff;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    border: 2px solid #d0ddff;
+}
+
+.manual-control-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    flex-wrap: wrap;
     gap: 10px;
 }
 
@@ -601,27 +522,90 @@ body {
     font-weight: 600;
     color: #555;
     font-size: 16px;
+    min-width: 150px;
 }
 
 .control-input {
     display: flex;
     align-items: center;
     gap: 15px;
+    flex-wrap: wrap;
 }
 
-select {
-    padding: 10px 15px;
-    border: 1px solid #d0ddff;
-    border-radius: 8px;
-    background: white;
+.pump-status {
+    font-weight: 700;
     font-size: 16px;
-    width: 200px;
-    outline: none;
-    transition: border-color 0.3s;
+    padding: 5px 15px;
+    border-radius: 20px;
+    background: white;
 }
 
-select:focus {
-    border-color: #0077ff;
+.pump-status.on {
+    color: #00cc66;
+}
+
+.pump-status.off {
+    color: #999;
+}
+
+/* Auto Settings */
+.auto-settings {
+    padding: 20px;
+    background: #f8faff;
+    border-radius: 12px;
+    margin-bottom: 20px;
+}
+
+.settings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+}
+
+@media (max-width: 768px) {
+    .settings-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.settings-zone {
+    padding: 15px;
+    background: white;
+    border-radius: 12px;
+    border: 2px solid #e8f0ff;
+}
+
+.settings-zone h4 {
+    margin-bottom: 15px;
+}
+
+.control-item {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.control-item input[type="range"] {
+    width: 100%;
+    accent-color: #0077ff;
+}
+
+.control-item input[type="range"] + span {
+    font-weight: 600;
+    color: #0077ff;
+    min-width: 50px;
+}
+
+/* Common Controls */
+.common-controls {
+    margin-top: 20px;
+}
+
+.controls-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
 }
 
 /* Toggle Switch */
@@ -712,6 +696,102 @@ input:checked + .slider:before {
     transform: translateY(-2px);
 }
 
+.btn-success {
+    background: #00cc66;
+    color: white;
+}
+
+.btn-success:hover {
+    background: #00994d;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 204, 102, 0.3);
+}
+
+.btn-danger {
+    background: #ff6b6b;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #cc5555;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
+}
+
+/* Log Container */
+.log-container {
+    background: white;
+    border-radius: 16px;
+    padding: 25px;
+    margin-bottom: 30px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.log-container h3 {
+    margin-bottom: 20px;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #0077ff;
+}
+
+.log-content {
+    max-height: 200px;
+    overflow-y: auto;
+    background: #f8faff;
+    border-radius: 12px;
+    padding: 15px;
+}
+
+.log-entry {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e8f0ff;
+    display: flex;
+    gap: 15px;
+    font-size: 14px;
+}
+
+.log-entry:last-child {
+    border-bottom: none;
+}
+
+.log-time {
+    color: #888;
+    font-weight: 500;
+    min-width: 80px;
+}
+
+.log-message {
+    color: #333;
+}
+
+.log-entry.water-on {
+    border-left: 3px solid #00cc66;
+}
+
+.log-entry.water-off {
+    border-left: 3px solid #ff6b6b;
+}
+
+.log-entry.mode-change {
+    border-left: 3px solid #0077ff;
+}
+
+.log-entry.auto-water {
+    border-left: 3px solid #ffa726;
+}
+
+.log-entry.warning {
+    border-left: 3px solid #ffa726;
+    background: rgba(255, 167, 38, 0.05);
+}
+
+.log-entry.error {
+    border-left: 3px solid #ff6b6b;
+    background: rgba(255, 107, 107, 0.05);
+}
+
 /* Footer */
 .footer {
     text-align: center;
@@ -734,4 +814,70 @@ input:checked + .slider:before {
 #dataCounter {
     font-weight: 600;
     color: #36d9d6;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .header-left h1 {
+        font-size: 22px;
+    }
+
+    .header-right {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .mode-control {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .mode-buttons {
+        flex-direction: column;
+    }
+
+    .mode-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .manual-control-item {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .control-input {
+        justify-content: center;
+    }
+
+    .btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .controls-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .settings-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .main-value {
+        font-size: 32px;
+    }
+
+    .log-entry {
+        flex-direction: column;
+        gap: 5px;
+    }
 }
