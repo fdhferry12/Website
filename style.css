@@ -801,6 +801,34 @@ input:checked + .slider:before {
     border-top: 1px solid rgba(0, 119, 255, 0.1);
 }
 
+.footer-stats {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+}
+
+.footer-stat {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #f8faff;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+}
+
+.footer-stat .stat-label {
+    color: #888;
+    font-weight: 500;
+}
+
+.footer-stat .stat-value {
+    color: #0077ff;
+    font-weight: 700;
+}
+
 .footer-info {
     margin-top: 8px;
     font-size: 13px;
