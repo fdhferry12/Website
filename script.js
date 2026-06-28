@@ -104,10 +104,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = await response.json();
             state.esp32Reachable = true;
             return {
-                temp: data.temp || 0,
-                soil1: data.soil1 || 0,
-                soil2: data.soil2 || 0,
-                water: data.water || 0,
+                temp: parseFloat(data.temp) || 0,
+                soil1: parseFloat(data.soil1) || 0,
+                soil2: parseFloat(data.soil2) || 0,
+                water: parseFloat(data.water) || 0,
                 pump1: data.pump1 || false,
                 pump2: data.pump2 || false
             };
@@ -134,13 +134,14 @@ document.addEventListener('DOMContentLoaded', function() {
     // UI Update (tanpa humidity)
     function updateValueWithAnimation(el, val) {
         if (!el) return;
-        if (el.textContent !== String(val)) {
-            el.textContent = val;
+        const strVal = typeof val === 'number' ? val.toFixed(1) : String(val);
+        if (el.textContent !== strVal) {
+            el.textContent = strVal;
             el.style.animation = 'none';
             el.offsetHeight;
             el.style.animation = 'valueUpdate 0.8s ease';
             setTimeout(() => el.style.animation = '', 800);
-        } else el.textContent = val;
+        } else el.textContent = strVal;
     }
 
     function updateConditionMarkers(container, active) {
@@ -285,7 +286,7 @@ document.addEventListener('DOMContentLoaded', function() {
         else if (!state.isWatering2 && data.soil2 < state.dryThreshold2 + 10) addLogEntry(`⚠️ Zona 2 mendekati kering`, 'warning');
     }
 
-    // MQTT (tanpa humidity parsing)
+    // MQTT (parsing soil sebagai float)
     function connectMQTT() {
         if (mqttClient) { try { mqttClient.end(true); } catch(e) {} }
         mqttClient = mqtt.connect(MQTT_BROKER, {
@@ -303,8 +304,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 const json = JSON.parse(raw);
                 const realData = {
                     temp: parseFloat(json.temp_C) || 0,
-                    soil1: parseInt(json.soil1_pct) || 0,
-                    soil2: parseInt(json.soil2_pct) || 0,
+                    soil1: parseFloat(json.soil1_pct) || 0,   // ← float
+                    soil2: parseFloat(json.soil2_pct) || 0,   // ← float
                     water: parseFloat(json.level_pct) || 0,
                     pump1: json.pump1 === true,
                     pump2: json.pump2 === true
@@ -321,9 +322,10 @@ document.addEventListener('DOMContentLoaded', function() {
         mqttClient.on('close', () => state.mqttConnected = false);
     }
 
-    // Dashboard update
+    // Dashboard update - tampilkan dengan 1 desimal
     function updateDashboardWithData(data) {
         if (!data) return;
+        // Gunakan toFixed(1) untuk angka dengan 1 desimal
         updateValueWithAnimation(document.getElementById('tempValue'), data.temp);
         updateValueWithAnimation(document.getElementById('soil1Value'), data.soil1);
         updateValueWithAnimation(document.getElementById('soil2Value'), data.soil2);
@@ -464,7 +466,7 @@ document.addEventListener('DOMContentLoaded', function() {
         setupLogout();
         setupAutoLogout();
         initCharts();
-        setupModeControl();       // ini sudah set manual default
+        setupModeControl();
         setupManualControls();
         setupAutoSettings();
         setupCommonControls();
