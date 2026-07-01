@@ -249,18 +249,35 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
 
-    function startWatering(pump) {
+    // ============================================================
+    // PERBAIKAN 1: Fungsi startWatering dengan parameter noTimer
+    // ============================================================
+    function startWatering(pump, noTimer = false) {
         const isWatering = pump === 1 ? state.isWatering1 : state.isWatering2;
-        if (isWatering) { addLogEntry(`⚠️ Pompa ${pump} sudah berjalan`, 'warning'); return; }
+        if (isWatering) { 
+            addLogEntry(`⚠️ Pompa ${pump} sudah berjalan`, 'warning'); 
+            return; 
+        }
         const dur = pump === 1 ? state.wateringDuration1 : state.wateringDuration2;
         sendPumpCommand(pump, 'on').then(() => {
-            if (pump === 1) { state.isWatering1 = true; state.pump1On = true; }
-            else { state.isWatering2 = true; state.pump2On = true; }
+            if (pump === 1) {
+                state.isWatering1 = true;
+                state.pump1On = true;
+            } else {
+                state.isWatering2 = true;
+                state.pump2On = true;
+            }
             updatePumpStatusUI(pump, true);
-            addLogEntry(`💧 Zona ${pump}: Penyiraman dimulai (${dur} detik)`, 'water-on');
-            const timer = setTimeout(() => stopWatering(pump), dur * 1000);
-            if (pump === 1) state.wateringTimer1 = timer;
-            else state.wateringTimer2 = timer;
+            if (noTimer) {
+                // Mode manual: nyala tanpa timer, mati hanya via tombol OFF
+                addLogEntry(`💧 Zona ${pump}: Penyiraman manual (tanpa timer)`, 'water-on');
+                // tidak ada timer
+            } else {
+                addLogEntry(`💧 Zona ${pump}: Penyiraman otomatis (${dur} detik)`, 'water-on');
+                const timer = setTimeout(() => stopWatering(pump), dur * 1000);
+                if (pump === 1) state.wateringTimer1 = timer;
+                else state.wateringTimer2 = timer;
+            }
         }).catch(e => addLogEntry(`❌ Gagal menyalakan pompa ${pump}: ${e.message}`, 'error'));
     }
 
@@ -304,8 +321,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 const json = JSON.parse(raw);
                 const realData = {
                     temp: parseFloat(json.temp_C) || 0,
-                    soil1: parseFloat(json.soil1_pct) || 0,   // ← float
-                    soil2: parseFloat(json.soil2_pct) || 0,   // ← float
+                    soil1: parseFloat(json.soil1_pct) || 0,
+                    soil2: parseFloat(json.soil2_pct) || 0,
                     water: parseFloat(json.level_pct) || 0,
                     pump1: json.pump1 === true,
                     pump2: json.pump2 === true
@@ -325,7 +342,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Dashboard update - tampilkan dengan 1 desimal
     function updateDashboardWithData(data) {
         if (!data) return;
-        // Gunakan toFixed(1) untuk angka dengan 1 desimal
         updateValueWithAnimation(document.getElementById('tempValue'), data.temp);
         updateValueWithAnimation(document.getElementById('soil1Value'), data.soil1);
         updateValueWithAnimation(document.getElementById('soil2Value'), data.soil2);
@@ -371,6 +387,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const autoSettings = document.getElementById('autoSettings');
         const modeStatus = document.getElementById('currentModeStatus');
 
+        // ============================================================
+        // PERBAIKAN 3: fungsi setMode dengan pembatalan timer
+        // ============================================================
         function setMode(mode) {
             state.mode = mode;
             autoBtn.classList.toggle('active', mode === 'auto');
@@ -380,6 +399,20 @@ document.addEventListener('DOMContentLoaded', function() {
             modeStatus.textContent = mode === 'auto' ? 'Otomatis' : 'Manual';
             modeStatus.style.color = mode === 'auto' ? '#43c51e' : '#ff2626';
             addLogEntry(`Mode: ${mode === 'auto' ? 'Otomatis' : 'Manual'}`, 'mode-change');
+
+            // Jika beralih ke manual, hentikan semua timer dan matikan pompa
+            if (mode === 'manual') {
+                if (state.isWatering1) {
+                    clearTimeout(state.wateringTimer1);
+                    state.wateringTimer1 = null;
+                    stopWatering(1);
+                }
+                if (state.isWatering2) {
+                    clearTimeout(state.wateringTimer2);
+                    state.wateringTimer2 = null;
+                    stopWatering(2);
+                }
+            }
         }
 
         autoBtn.addEventListener('click', () => setMode('auto'));
@@ -396,7 +429,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 const pump = parseInt(this.dataset.pump);
                 const action = this.dataset.action;
-                action === 'on' ? startWatering(pump) : stopWatering(pump);
+                // ============================================================
+                // PERBAIKAN 2: panggil startWatering dengan noTimer = true
+                // ============================================================
+                if (action === 'on') {
+                    startWatering(pump, true);
+                } else {
+                    stopWatering(pump);
+                }
             });
         });
     }
