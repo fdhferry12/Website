@@ -1,41 +1,11 @@
-// Smart Greenhouse Dual Control - Real Data, Manual Default, No Humidity
+// Smart Greenhouse Dual Control - Pure MQTT (Subscribe ke topik spesifik)
 document.addEventListener('DOMContentLoaded', function() {
-    const ESP32_IP = '192.168.1.100'; // GANTI DENGAN IP ESP32 ANDA
-    const ESP32_BASE_URL = `http://${ESP32_IP}`;
 
-    // Auth
-    function displayUsername() {
-        document.getElementById('currentUser').textContent = localStorage.getItem('username') || 'Admin';
-    }
-    function setupLogout() {
-        document.getElementById('logoutBtn')?.addEventListener('click', () => {
-            if (confirm('Apakah Anda yakin ingin keluar?')) {
-                localStorage.removeItem('isLoggedIn');
-                localStorage.removeItem('username');
-                window.location.href = 'login.html';
-            }
-        });
-    }
-    function setupAutoLogout() {
-        let timer;
-        function reset() {
-            clearTimeout(timer);
-            timer = setTimeout(() => {
-                alert('Sesi berakhir. Silakan login kembali.');
-                localStorage.removeItem('isLoggedIn');
-                localStorage.removeItem('username');
-                window.location.href = 'login.html';
-            }, 30 * 60 * 1000);
-        }
-        document.addEventListener('mousemove', reset);
-        document.addEventListener('keypress', reset);
-        document.addEventListener('click', reset);
-        reset();
-    }
-
-    // State (tanpa humidity)
+    // ===========================
+    // STATE
+    // ===========================
     const state = {
-        mode: 'manual',           // DEFAULT MANUAL
+        mode: 'manual',
         updateInterval: 2000,
         dataCounter: 0,
         uptime: 0,
@@ -52,16 +22,21 @@ document.addEventListener('DOMContentLoaded', function() {
         optimalThreshold2: 60,
         wateringDuration2: 15,
         mqttConnected: false,
-        lastRealData: null,
-        esp32Reachable: false
+        lastData: null
     };
 
-    // MQTT
+    // ===========================
+    // MQTT CONFIG
+    // ===========================
     const MQTT_BROKER = 'wss://broker.emqx.io:8084/mqtt';
-    const MQTT_TOPIC = 'tandon/status';
+    const MQTT_TOPIC_STATUS = 'tandon/status';          // topik data dari ESP32
+    const MQTT_TOPIC_PUMP1 = 'tandon/pump1/control';    // perintah pompa 1
+    const MQTT_TOPIC_PUMP2 = 'tandon/pump2/control';    // perintah pompa 2
     let mqttClient = null;
 
-    // Charts (tanpa humidity)
+    // ===========================
+    // CHARTS (tanpa humidity)
+    // ===========================
     let tempChart, soil1Chart, soil2Chart, waterChart;
     let tempData = [], soil1Data = [], soil2Data = [], waterData = [], timeLabels = [];
     const chartOptions = {
@@ -96,42 +71,106 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Fetch data (tanpa hum)
-    async function fetchDataFromESP32() {
-        try {
-            const response = await fetch(`${ESP32_BASE_URL}/status`);
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const data = await response.json();
-            state.esp32Reachable = true;
-            return {
-                temp: parseFloat(data.temp) || 0,
-                soil1: parseFloat(data.soil1) || 0,
-                soil2: parseFloat(data.soil2) || 0,
-                water: parseFloat(data.water) || 0,
-                pump1: data.pump1 || false,
-                pump2: data.pump2 || false
-            };
-        } catch (e) {
-            console.error('ESP32 fetch gagal:', e);
-            state.esp32Reachable = false;
-            return null;
+    // ===========================
+    // MQTT FUNCTIONS
+    // ===========================
+    function connectMQTT() {
+        if (mqttClient) {
+            try { mqttClient.end(true); } catch(e) {}
         }
+        mqttClient = mqtt.connect(MQTT_BROKER, {
+            clientId: 'web_dashboard_' + Math.random().toString(16).substr(2,8),
+            clean: true,
+            reconnectPeriod: 5000,
+            connectTimeout: 10000
+        });
+
+        mqttClient.on('connect', () => {
+            state.mqttConnected = true;
+            mqttClient.subscribe(MQTT_TOPIC_STATUS, { qos: 0 }, (err) => {
+                if (!err) {
+                    addLogEntry('📡 Terhubung ke MQTT (EMQX) - subscribe ke ' + MQTT_TOPIC_STATUS, 'info');
+                    document.getElementById('mqttStatus').innerHTML = '<i class="fas fa-cloud"></i> MQTT Terhubung';
+                    document.getElementById('mqttStatus').style.color = '#36d9d6';
+                    console.log('✅ Subscribed to ' + MQTT_TOPIC_STATUS);
+                } else {
+                    console.error('Subscribe error:', err);
+                    addLogEntry('❌ Gagal subscribe: ' + err.message, 'error');
+                }
+            });
+        });
+
+        // Handler pesan masuk (dengan log detail)
+        mqttClient.on('message', (topic, payload) => {
+            const msg = payload.toString();
+            console.log(`📩 MQTT message on topic "${topic}":`, msg);
+            addLogEntry(`📨 ${topic}: ${msg.substring(0, 60)}${msg.length > 60 ? '...' : ''}`, 'info');
+
+            // Hanya proses jika topik yang diinginkan
+            if (topic === MQTT_TOPIC_STATUS) {
+                try {
+                    // Bersihkan NaN / Infinity
+                    let raw = msg.replace(/:nan([,}])/gi, ':null$1').replace(/:inf(?:inity)?([,}])/gi, ':null$1');
+                    const json = JSON.parse(raw);
+                    const data = {
+                        temp: parseFloat(json.temp_C) || 0,
+                        soil1: parseFloat(json.soil1_pct) || 0,
+                        soil2: parseFloat(json.soil2_pct) || 0,
+                        water: parseFloat(json.level_pct) || 0,
+                        pump1: json.pump1 === true,
+                        pump2: json.pump2 === true
+                    };
+                    state.lastData = data;
+                    state.pump1On = data.pump1;
+                    state.pump2On = data.pump2;
+                    updatePumpStatusUI(1, state.pump1On);
+                    updatePumpStatusUI(2, state.pump2On);
+                    updateDashboardWithData(data);
+                    console.log('✅ Data sensor diproses:', data);
+                } catch(e) {
+                    console.error('Parse error:', e);
+                    addLogEntry('❌ Gagal parsing data: ' + e.message, 'error');
+                }
+            }
+        });
+
+        mqttClient.on('error', (err) => {
+            state.mqttConnected = false;
+            console.error('MQTT error:', err);
+            document.getElementById('mqttStatus').innerHTML = '<i class="fas fa-exclamation-triangle"></i> Error MQTT';
+            document.getElementById('mqttStatus').style.color = '#ff6b6b';
+            addLogEntry(`❌ MQTT error: ${err.message}`, 'error');
+        });
+
+        mqttClient.on('close', () => {
+            state.mqttConnected = false;
+            document.getElementById('mqttStatus').innerHTML = '<i class="fas fa-exclamation-triangle"></i> Terputus';
+            document.getElementById('mqttStatus').style.color = '#ff6b6b';
+        });
     }
 
-    async function fetchData() {
-        const esp32Data = await fetchDataFromESP32();
-        if (esp32Data) {
-            state.lastRealData = esp32Data;
-            state.pump1On = esp32Data.pump1;
-            state.pump2On = esp32Data.pump2;
-            updatePumpStatusUI(1, state.pump1On);
-            updatePumpStatusUI(2, state.pump2On);
-            return esp32Data;
+    // Kirim perintah MQTT ke ESP32
+    function sendPumpCommand(pump, cmd) {
+        if (!mqttClient || !state.mqttConnected) {
+            addLogEntry('❌ MQTT tidak terhubung, tidak bisa mengirim perintah', 'error');
+            return Promise.reject('MQTT not connected');
         }
-        return state.lastRealData;
+        const topic = pump === 1 ? MQTT_TOPIC_PUMP1 : MQTT_TOPIC_PUMP2;
+        return new Promise((resolve, reject) => {
+            mqttClient.publish(topic, cmd, { qos: 1 }, (err) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    console.log(`MQTT: pompa ${pump} -> ${cmd}`);
+                    resolve();
+                }
+            });
+        });
     }
 
-    // UI Update (tanpa humidity)
+    // ===========================
+    // UI UPDATE FUNCTIONS
+    // ===========================
     function updateValueWithAnimation(el, val) {
         if (!el) return;
         const strVal = typeof val === 'number' ? val.toFixed(1) : String(val);
@@ -168,21 +207,26 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updateStatusIndicators(data) {
-        // Temperature only
         let cond = 'normal';
-        if (data.temp < 20) { document.getElementById('tempStatus').textContent = 'Dingin'; document.getElementById('tempStatus').style.color = '#4d96ff'; cond = 'cold'; }
-        else if (data.temp > 30) { document.getElementById('tempStatus').textContent = 'Panas'; document.getElementById('tempStatus').style.color = '#ff6b6b'; cond = 'hot'; }
-        else { document.getElementById('tempStatus').textContent = 'Normal'; document.getElementById('tempStatus').style.color = '#36d9d6'; }
+        if (data.temp < 20) {
+            document.getElementById('tempStatus').textContent = 'Dingin';
+            document.getElementById('tempStatus').style.color = '#4d96ff';
+            cond = 'cold';
+        } else if (data.temp > 30) {
+            document.getElementById('tempStatus').textContent = 'Panas';
+            document.getElementById('tempStatus').style.color = '#ff6b6b';
+            cond = 'hot';
+        } else {
+            document.getElementById('tempStatus').textContent = 'Normal';
+            document.getElementById('tempStatus').style.color = '#36d9d6';
+        }
         updateConditionMarkers(document.querySelector('.temp-condition-markers'), cond);
 
-        // Soil 1
         updateSoilStatus('soil1', data.soil1, state.dryThreshold1, state.optimalThreshold1,
             document.querySelector('.soil-1 .soil-level-markers'));
-        // Soil 2
         updateSoilStatus('soil2', data.soil2, state.dryThreshold2, state.optimalThreshold2,
             document.querySelector('.soil-2 .soil-level-markers'));
 
-        // Water Level
         const wf = document.getElementById('waterLevelFill');
         let wcond = 'normal';
         if (data.water < 20) {
@@ -225,7 +269,9 @@ document.addEventListener('DOMContentLoaded', function() {
         updateConditionMarkers(markers, cond);
     }
 
-    // Watering
+    // ===========================
+    // WATERING LOGIC
+    // ===========================
     function addLogEntry(msg, type='info') {
         const log = document.getElementById('logContent');
         const entry = document.createElement('div');
@@ -237,26 +283,11 @@ document.addEventListener('DOMContentLoaded', function() {
         while (log.children.length > 50) log.firstChild.remove();
     }
 
-    function sendPumpCommand(pump, cmd) {
-        return fetch(`${ESP32_BASE_URL}/pump${pump}?state=${cmd}`)
-            .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); console.log(`Pompa ${pump}: ${cmd}`); })
-            .catch(err => {
-                console.error(err);
-                if (mqttClient && state.mqttConnected) {
-                    mqttClient.publish(`tandon/pump${pump}/control`, cmd, { qos: 1 });
-                    console.log(`MQTT fallback: pompa ${pump} ${cmd}`);
-                } else throw err;
-            });
-    }
-
-    // ============================================================
-    // PERBAIKAN 1: Fungsi startWatering dengan parameter noTimer
-    // ============================================================
     function startWatering(pump, noTimer = false) {
         const isWatering = pump === 1 ? state.isWatering1 : state.isWatering2;
-        if (isWatering) { 
-            addLogEntry(`⚠️ Pompa ${pump} sudah berjalan`, 'warning'); 
-            return; 
+        if (isWatering) {
+            addLogEntry(`⚠️ Pompa ${pump} sudah berjalan`, 'warning');
+            return;
         }
         const dur = pump === 1 ? state.wateringDuration1 : state.wateringDuration2;
         sendPumpCommand(pump, 'on').then(() => {
@@ -269,9 +300,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             updatePumpStatusUI(pump, true);
             if (noTimer) {
-                // Mode manual: nyala tanpa timer, mati hanya via tombol OFF
                 addLogEntry(`💧 Zona ${pump}: Penyiraman manual (tanpa timer)`, 'water-on');
-                // tidak ada timer
             } else {
                 addLogEntry(`💧 Zona ${pump}: Penyiraman otomatis (${dur} detik)`, 'water-on');
                 const timer = setTimeout(() => stopWatering(pump), dur * 1000);
@@ -284,11 +313,19 @@ document.addEventListener('DOMContentLoaded', function() {
     function stopWatering(pump) {
         sendPumpCommand(pump, 'off').then(() => {
             if (pump === 1) {
-                state.isWatering1 = false; state.pump1On = false;
-                if (state.wateringTimer1) { clearTimeout(state.wateringTimer1); state.wateringTimer1 = null; }
+                state.isWatering1 = false;
+                state.pump1On = false;
+                if (state.wateringTimer1) {
+                    clearTimeout(state.wateringTimer1);
+                    state.wateringTimer1 = null;
+                }
             } else {
-                state.isWatering2 = false; state.pump2On = false;
-                if (state.wateringTimer2) { clearTimeout(state.wateringTimer2); state.wateringTimer2 = null; }
+                state.isWatering2 = false;
+                state.pump2On = false;
+                if (state.wateringTimer2) {
+                    clearTimeout(state.wateringTimer2);
+                    state.wateringTimer2 = null;
+                }
             }
             updatePumpStatusUI(pump, false);
             addLogEntry(`💧 Zona ${pump}: Penyiraman selesai`, 'water-off');
@@ -297,49 +334,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function checkAutoWatering(data) {
         if (state.mode !== 'auto') return;
-        if (!state.isWatering1 && data.soil1 < state.dryThreshold1) { addLogEntry(`🌱 Zona 1 auto watering`, 'auto-water'); startWatering(1); }
-        else if (!state.isWatering1 && data.soil1 < state.dryThreshold1 + 10) addLogEntry(`⚠️ Zona 1 mendekati kering`, 'warning');
-        if (!state.isWatering2 && data.soil2 < state.dryThreshold2) { addLogEntry(`🌱 Zona 2 auto watering`, 'auto-water'); startWatering(2); }
-        else if (!state.isWatering2 && data.soil2 < state.dryThreshold2 + 10) addLogEntry(`⚠️ Zona 2 mendekati kering`, 'warning');
+        if (!state.isWatering1 && data.soil1 < state.dryThreshold1) {
+            addLogEntry(`🌱 Zona 1 auto watering`, 'auto-water');
+            startWatering(1, false);
+        }
+        if (!state.isWatering2 && data.soil2 < state.dryThreshold2) {
+            addLogEntry(`🌱 Zona 2 auto watering`, 'auto-water');
+            startWatering(2, false);
+        }
     }
 
-    // MQTT (parsing soil sebagai float)
-    function connectMQTT() {
-        if (mqttClient) { try { mqttClient.end(true); } catch(e) {} }
-        mqttClient = mqtt.connect(MQTT_BROKER, {
-            clientId: 'web_dashboard_' + Math.random().toString(16).substr(2,8),
-            clean: true, reconnectPeriod: 5000, connectTimeout: 10000
-        });
-        mqttClient.on('connect', () => {
-            state.mqttConnected = true;
-            mqttClient.subscribe(MQTT_TOPIC, err => { if (!err) addLogEntry('📡 Terhubung ke MQTT (EMQX)', 'info'); });
-        });
-        mqttClient.on('message', (topic, payload) => {
-            try {
-                let raw = payload.toString();
-                raw = raw.replace(/:nan([,}])/gi, ':null$1').replace(/:inf(?:inity)?([,}])/gi, ':null$1');
-                const json = JSON.parse(raw);
-                const realData = {
-                    temp: parseFloat(json.temp_C) || 0,
-                    soil1: parseFloat(json.soil1_pct) || 0,
-                    soil2: parseFloat(json.soil2_pct) || 0,
-                    water: parseFloat(json.level_pct) || 0,
-                    pump1: json.pump1 === true,
-                    pump2: json.pump2 === true
-                };
-                state.lastRealData = realData;
-                state.pump1On = realData.pump1;
-                state.pump2On = realData.pump2;
-                updatePumpStatusUI(1, state.pump1On);
-                updatePumpStatusUI(2, state.pump2On);
-                if (!state.esp32Reachable) updateDashboardWithData(realData);
-            } catch(e) { console.error('MQTT parse error:', e); }
-        });
-        mqttClient.on('error', () => state.mqttConnected = false);
-        mqttClient.on('close', () => state.mqttConnected = false);
-    }
-
-    // Dashboard update - tampilkan dengan 1 desimal
+    // ===========================
+    // DASHBOARD UPDATE
+    // ===========================
     function updateDashboardWithData(data) {
         if (!data) return;
         updateValueWithAnimation(document.getElementById('tempValue'), data.temp);
@@ -370,16 +377,13 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('lastUpdateTime').textContent = time;
         state.dataCounter++;
         document.getElementById('dataCounter').textContent = state.dataCounter;
-        state.uptime += state.updateInterval / 1000;
+        state.uptime += 2;
         document.getElementById('uptime').textContent = Math.round(state.uptime);
     }
 
-    async function updateDashboard() {
-        const data = await fetchData();
-        if (data) updateDashboardWithData(data);
-    }
-
-    // Setup UI
+    // ===========================
+    // UI SETUP
+    // ===========================
     function setupModeControl() {
         const autoBtn = document.getElementById('autoModeBtn');
         const manualBtn = document.getElementById('manualModeBtn');
@@ -387,9 +391,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const autoSettings = document.getElementById('autoSettings');
         const modeStatus = document.getElementById('currentModeStatus');
 
-        // ============================================================
-        // PERBAIKAN 3: fungsi setMode dengan pembatalan timer
-        // ============================================================
         function setMode(mode) {
             state.mode = mode;
             autoBtn.classList.toggle('active', mode === 'auto');
@@ -400,7 +401,6 @@ document.addEventListener('DOMContentLoaded', function() {
             modeStatus.style.color = mode === 'auto' ? '#43c51e' : '#ff2626';
             addLogEntry(`Mode: ${mode === 'auto' ? 'Otomatis' : 'Manual'}`, 'mode-change');
 
-            // Jika beralih ke manual, hentikan semua timer dan matikan pompa
             if (mode === 'manual') {
                 if (state.isWatering1) {
                     clearTimeout(state.wateringTimer1);
@@ -417,7 +417,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         autoBtn.addEventListener('click', () => setMode('auto'));
         manualBtn.addEventListener('click', () => setMode('manual'));
-        setMode('manual'); // DEFAULT MANUAL
+        setMode('manual');
     }
 
     function setupManualControls() {
@@ -429,9 +429,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 const pump = parseInt(this.dataset.pump);
                 const action = this.dataset.action;
-                // ============================================================
-                // PERBAIKAN 2: panggil startWatering dengan noTimer = true
-                // ============================================================
                 if (action === 'on') {
                     startWatering(pump, true);
                 } else {
@@ -471,12 +468,12 @@ document.addEventListener('DOMContentLoaded', function() {
     function setupCommonControls() {
         document.getElementById('updateInterval').addEventListener('change', function() {
             state.updateInterval = parseInt(this.value);
-            if (window.updateIntervalId) {
-                clearInterval(window.updateIntervalId);
-                window.updateIntervalId = setInterval(updateDashboard, state.updateInterval);
-            }
         });
-        document.getElementById('refreshBtn').addEventListener('click', updateDashboard);
+        document.getElementById('refreshBtn').addEventListener('click', () => {
+            addLogEntry('🔄 Refresh manual', 'info');
+            if (state.lastData) updateDashboardWithData(state.lastData);
+            else addLogEntry('⚠️ Belum ada data dari MQTT', 'warning');
+        });
         document.getElementById('resetBtn').addEventListener('click', () => {
             timeLabels.length = 0; tempData.length = 0; soil1Data.length = 0; soil2Data.length = 0; waterData.length = 0;
             tempChart.update(); soil1Chart.update(); soil2Chart.update(); waterChart.update();
@@ -484,24 +481,48 @@ document.addEventListener('DOMContentLoaded', function() {
             state.uptime = 0; document.getElementById('uptime').textContent = '0';
             addLogEntry('🔄 Data grafik direset', 'info');
         });
-        setInterval(() => {
-            const el = document.getElementById('mqttStatus');
-            if (state.esp32Reachable) {
-                el.innerHTML = '<i class="fas fa-wifi"></i> ESP32 Online';
-                el.style.color = '#00cc66';
-            } else if (state.mqttConnected) {
-                el.innerHTML = '<i class="fas fa-cloud"></i> MQTT Terhubung';
-                el.style.color = '#36d9d6';
-            } else {
-                el.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Terputus';
-                el.style.color = '#ff6b6b';
-            }
-        }, 2000);
     }
 
-    // Init
+    // ===========================
+    // AUTH
+    // ===========================
+    function displayUsername() {
+        document.getElementById('currentUser').textContent = localStorage.getItem('username') || 'Admin';
+    }
+    function setupLogout() {
+        document.getElementById('logoutBtn')?.addEventListener('click', () => {
+            if (confirm('Apakah Anda yakin ingin keluar?')) {
+                localStorage.removeItem('isLoggedIn');
+                localStorage.removeItem('username');
+                window.location.href = 'login.html';
+            }
+        });
+    }
+    function setupAutoLogout() {
+        let timer;
+        function reset() {
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+                alert('Sesi berakhir. Silakan login kembali.');
+                localStorage.removeItem('isLoggedIn');
+                localStorage.removeItem('username');
+                window.location.href = 'login.html';
+            }, 30 * 60 * 1000);
+        }
+        document.addEventListener('mousemove', reset);
+        document.addEventListener('keypress', reset);
+        document.addEventListener('click', reset);
+        reset();
+    }
+
+    // ===========================
+    // INIT
+    // ===========================
     function initDashboard() {
-        if (!localStorage.getItem('isLoggedIn')) { window.location.href = 'login.html'; return; }
+        if (!localStorage.getItem('isLoggedIn')) {
+            window.location.href = 'login.html';
+            return;
+        }
         displayUsername();
         setupLogout();
         setupAutoLogout();
@@ -510,11 +531,20 @@ document.addEventListener('DOMContentLoaded', function() {
         setupManualControls();
         setupAutoSettings();
         setupCommonControls();
-        updateDashboard();
-        window.updateIntervalId = setInterval(updateDashboard, state.updateInterval);
         connectMQTT();
-        addLogEntry('🚀 Dashboard siap (data real, manual default)', 'info');
-        addLogEntry(`📡 ESP32 IP: ${ESP32_IP}`, 'info');
+
+        setInterval(() => {
+            const el = document.getElementById('mqttStatus');
+            if (state.mqttConnected) {
+                el.innerHTML = '<i class="fas fa-cloud"></i> MQTT Terhubung';
+                el.style.color = '#36d9d6';
+            } else {
+                el.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Terputus';
+                el.style.color = '#ff6b6b';
+            }
+        }, 2000);
+
+        addLogEntry('🚀 Dashboard siap (subscribe ke ' + MQTT_TOPIC_STATUS + ')', 'info');
     }
 
     initDashboard();
