@@ -1,5 +1,8 @@
 // Smart Greenhouse Dual Control - Pure MQTT (Subscribe ke topik spesifik)
-document.addEventListener('DOMContentLoaded', function() {
+// + Soil Moisture Smoothing (Moving Average window 8)
+// + Temperature Smoothing (Moving Average window 3) -> dibulatkan ke integer (1°C)
+// Durasi penyiraman default 15 detik
+document.addEventListener('DOMContentLoaded', function () {
 
     // ===========================
     // STATE
@@ -26,48 +29,171 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     // ===========================
+    // SMOOTHING BUFFER
+    // ===========================
+    const SMOOTH_WINDOW_SOIL = 8;
+    const SMOOTH_WINDOW_TEMP = 3;
+
+    const soil1Buffer = [];
+    const soil2Buffer = [];
+    const tempBuffer = [];
+
+    function smoothValue(buffer, newValue, windowSize) {
+        buffer.push(newValue);
+        if (buffer.length > windowSize) buffer.shift();
+        const sum = buffer.reduce((a, b) => a + b, 0);
+        return +(sum / buffer.length).toFixed(1);
+    }
+
+    // Fungsi khusus suhu: rata-rata lalu dibulatkan ke integer
+    function smoothTempValue(buffer, newValue, windowSize) {
+        const avg = smoothValue(buffer, newValue, windowSize);
+        return Math.round(avg);
+    }
+
+    // ===========================
     // MQTT CONFIG
     // ===========================
     const MQTT_BROKER = 'wss://broker.emqx.io:8084/mqtt';
-    const MQTT_TOPIC_STATUS = 'tandon/status';          // topik data dari ESP32
-    const MQTT_TOPIC_PUMP1 = 'tandon/pump1/control';    // perintah pompa 1
-    const MQTT_TOPIC_PUMP2 = 'tandon/pump2/control';    // perintah pompa 2
+    const MQTT_TOPIC_STATUS = 'tandon/status';
+    const MQTT_TOPIC_PUMP1 = 'tandon/pump1/control';
+    const MQTT_TOPIC_PUMP2 = 'tandon/pump2/control';
     let mqttClient = null;
 
     // ===========================
-    // CHARTS (tanpa humidity)
+    // CHARTS
     // ===========================
     let tempChart, soil1Chart, soil2Chart, waterChart;
     let tempData = [], soil1Data = [], soil2Data = [], waterData = [], timeLabels = [];
-    const chartOptions = {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { position: 'top' }, tooltip: { mode: 'index', intersect: false } },
-        scales: { x: { grid: { display: true, color: 'rgba(0,0,0,0.05)' }, ticks: { maxTicksLimit: 10 } },
-                  y: { grid: { display: true, color: 'rgba(0,0,0,0.05)' }, beginAtZero: false } },
+
+    const commonChartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { position: 'top' },
+            tooltip: { mode: 'index', intersect: false }
+        },
+        scales: {
+            x: {
+                grid: { display: true, color: 'rgba(0,0,0,0.05)' },
+                ticks: { maxTicksLimit: 10 }
+            },
+            y: {
+                grid: { display: true, color: 'rgba(0,0,0,0.05)' },
+                beginAtZero: false
+            }
+        },
         animation: { duration: 1000 },
         interaction: { intersect: false, mode: 'nearest' }
     };
 
     function initCharts() {
+        // Suhu (default)
         tempChart = new Chart(document.getElementById('tempChart').getContext('2d'), {
             type: 'line',
-            data: { labels: timeLabels, datasets: [{ label: 'Suhu (°C)', data: tempData, borderColor: '#ff6b6b', backgroundColor: 'rgba(255,107,107,0.1)', borderWidth: 3, tension: 0.4, fill: true, pointRadius: 4, pointHoverRadius: 6 }] },
-            options: chartOptions
+            data: {
+                labels: timeLabels,
+                datasets: [{
+                    label: 'Suhu (°C)',
+                    data: tempData,
+                    borderColor: '#ff6b6b',
+                    backgroundColor: 'rgba(255,107,107,0.1)',
+                    borderWidth: 3,
+                    tension: 0.4,
+                    fill: true,
+                    pointRadius: 2,
+                    pointHoverRadius: 6
+                }]
+            },
+            options: commonChartOptions
         });
+
+        // Soil 1 (step 1%)
         soil1Chart = new Chart(document.getElementById('soil1Chart').getContext('2d'), {
             type: 'line',
-            data: { labels: timeLabels, datasets: [{ label: 'Soil 1 (%)', data: soil1Data, borderColor: '#8B4513', backgroundColor: 'rgba(139,69,19,0.1)', borderWidth: 3, tension: 0.4, fill: true, pointRadius: 4, pointHoverRadius: 6 }] },
-            options: chartOptions
+            data: {
+                labels: timeLabels,
+                datasets: [{
+                    label: 'Soil 1 (%)',
+                    data: soil1Data,
+                    borderColor: '#8B4513',
+                    backgroundColor: 'rgba(139,69,19,0.1)',
+                    borderWidth: 3,
+                    tension: 0.4,
+                    fill: true,
+                    pointRadius: 2,
+                    pointHoverRadius: 6
+                }]
+            },
+            options: {
+                ...commonChartOptions,
+                scales: {
+                    ...commonChartOptions.scales,
+                    y: {
+                        ...commonChartOptions.scales.y,
+                        ticks: {
+                            stepSize: 1,
+                            callback: function(value) { return value + '%'; }
+                        },
+                        min: 0,
+                        max: 100
+                    }
+                }
+            }
         });
+
+        // Soil 2 (sama)
         soil2Chart = new Chart(document.getElementById('soil2Chart').getContext('2d'), {
             type: 'line',
-            data: { labels: timeLabels, datasets: [{ label: 'Soil 2 (%)', data: soil2Data, borderColor: '#006400', backgroundColor: 'rgba(0,100,0,0.1)', borderWidth: 3, tension: 0.4, fill: true, pointRadius: 4, pointHoverRadius: 6 }] },
-            options: chartOptions
+            data: {
+                labels: timeLabels,
+                datasets: [{
+                    label: 'Soil 2 (%)',
+                    data: soil2Data,
+                    borderColor: '#006400',
+                    backgroundColor: 'rgba(0,100,0,0.1)',
+                    borderWidth: 3,
+                    tension: 0.4,
+                    fill: true,
+                    pointRadius: 2,
+                    pointHoverRadius: 6
+                }]
+            },
+            options: {
+                ...commonChartOptions,
+                scales: {
+                    ...commonChartOptions.scales,
+                    y: {
+                        ...commonChartOptions.scales.y,
+                        ticks: {
+                            stepSize: 1,
+                            callback: function(value) { return value + '%'; }
+                        },
+                        min: 0,
+                        max: 100
+                    }
+                }
+            }
         });
+
+        // Level Air
         waterChart = new Chart(document.getElementById('waterChart').getContext('2d'), {
             type: 'line',
-            data: { labels: timeLabels, datasets: [{ label: 'Level Air (%)', data: waterData, borderColor: '#36d9d6', backgroundColor: 'rgba(54,217,214,0.1)', borderWidth: 3, tension: 0.4, fill: true, pointRadius: 4, pointHoverRadius: 6 }] },
-            options: chartOptions
+            data: {
+                labels: timeLabels,
+                datasets: [{
+                    label: 'Level Air (%)',
+                    data: waterData,
+                    borderColor: '#36d9d6',
+                    backgroundColor: 'rgba(54,217,214,0.1)',
+                    borderWidth: 3,
+                    tension: 0.4,
+                    fill: true,
+                    pointRadius: 2,
+                    pointHoverRadius: 6
+                }]
+            },
+            options: commonChartOptions
         });
     }
 
@@ -76,10 +202,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // ===========================
     function connectMQTT() {
         if (mqttClient) {
-            try { mqttClient.end(true); } catch(e) {}
+            try { mqttClient.end(true); } catch (e) { }
         }
         mqttClient = mqtt.connect(MQTT_BROKER, {
-            clientId: 'web_dashboard_' + Math.random().toString(16).substr(2,8),
+            clientId: 'web_dashboard_' + Math.random().toString(16).substr(2, 8),
             clean: true,
             reconnectPeriod: 5000,
             connectTimeout: 10000
@@ -92,24 +218,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     addLogEntry('📡 Terhubung ke MQTT (EMQX) - subscribe ke ' + MQTT_TOPIC_STATUS, 'info');
                     document.getElementById('mqttStatus').innerHTML = '<i class="fas fa-cloud"></i> MQTT Terhubung';
                     document.getElementById('mqttStatus').style.color = '#36d9d6';
-                    console.log('✅ Subscribed to ' + MQTT_TOPIC_STATUS);
                 } else {
-                    console.error('Subscribe error:', err);
                     addLogEntry('❌ Gagal subscribe: ' + err.message, 'error');
                 }
             });
         });
 
-        // Handler pesan masuk (dengan log detail)
         mqttClient.on('message', (topic, payload) => {
             const msg = payload.toString();
-            console.log(`📩 MQTT message on topic "${topic}":`, msg);
-            addLogEntry(`📨 ${topic}: ${msg.substring(0, 60)}${msg.length > 60 ? '...' : ''}`, 'info');
-
-            // Hanya proses jika topik yang diinginkan
             if (topic === MQTT_TOPIC_STATUS) {
                 try {
-                    // Bersihkan NaN / Infinity
                     let raw = msg.replace(/:nan([,}])/gi, ':null$1').replace(/:inf(?:inity)?([,}])/gi, ':null$1');
                     const json = JSON.parse(raw);
                     const data = {
@@ -125,9 +243,20 @@ document.addEventListener('DOMContentLoaded', function() {
                     state.pump2On = data.pump2;
                     updatePumpStatusUI(1, state.pump1On);
                     updatePumpStatusUI(2, state.pump2On);
-                    updateDashboardWithData(data);
-                    console.log('✅ Data sensor diproses:', data);
-                } catch(e) {
+
+                    // --------- SMOOTHING (suhu dibulatkan) ----------
+                    const smoothTemp = smoothTempValue(tempBuffer, data.temp, SMOOTH_WINDOW_TEMP);
+                    const smoothSoil1 = smoothValue(soil1Buffer, data.soil1, SMOOTH_WINDOW_SOIL);
+                    const smoothSoil2 = smoothValue(soil2Buffer, data.soil2, SMOOTH_WINDOW_SOIL);
+
+                    const smoothedData = {
+                        ...data,
+                        temp: smoothTemp,
+                        soil1: smoothSoil1,
+                        soil2: smoothSoil2
+                    };
+                    updateDashboardWithData(smoothedData);
+                } catch (e) {
                     console.error('Parse error:', e);
                     addLogEntry('❌ Gagal parsing data: ' + e.message, 'error');
                 }
@@ -136,7 +265,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
         mqttClient.on('error', (err) => {
             state.mqttConnected = false;
-            console.error('MQTT error:', err);
             document.getElementById('mqttStatus').innerHTML = '<i class="fas fa-exclamation-triangle"></i> Error MQTT';
             document.getElementById('mqttStatus').style.color = '#ff6b6b';
             addLogEntry(`❌ MQTT error: ${err.message}`, 'error');
@@ -149,7 +277,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Kirim perintah MQTT ke ESP32
     function sendPumpCommand(pump, cmd) {
         if (!mqttClient || !state.mqttConnected) {
             addLogEntry('❌ MQTT tidak terhubung, tidak bisa mengirim perintah', 'error');
@@ -158,9 +285,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const topic = pump === 1 ? MQTT_TOPIC_PUMP1 : MQTT_TOPIC_PUMP2;
         return new Promise((resolve, reject) => {
             mqttClient.publish(topic, cmd, { qos: 1 }, (err) => {
-                if (err) {
-                    reject(err);
-                } else {
+                if (err) reject(err);
+                else {
                     console.log(`MQTT: pompa ${pump} -> ${cmd}`);
                     resolve();
                 }
@@ -272,10 +398,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // ===========================
     // WATERING LOGIC
     // ===========================
-    function addLogEntry(msg, type='info') {
+    function addLogEntry(msg, type = 'info') {
         const log = document.getElementById('logContent');
         const entry = document.createElement('div');
-        const time = new Date().toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+        const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         entry.className = `log-entry ${type}`;
         entry.innerHTML = `<span class="log-time">${time}</span><span class="log-message">${msg}</span>`;
         log.appendChild(entry);
@@ -349,6 +475,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // ===========================
     function updateDashboardWithData(data) {
         if (!data) return;
+        // Tampilkan suhu sebagai integer
         updateValueWithAnimation(document.getElementById('tempValue'), data.temp);
         updateValueWithAnimation(document.getElementById('soil1Value'), data.soil1);
         updateValueWithAnimation(document.getElementById('soil2Value'), data.soil2);
@@ -362,9 +489,9 @@ document.addEventListener('DOMContentLoaded', function() {
         updateStatusIndicators(data);
         checkAutoWatering(data);
 
-        const time = new Date().toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+        const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         timeLabels.push(time);
-        tempData.push(data.temp);
+        tempData.push(data.temp);   // data sudah integer
         soil1Data.push(data.soil1);
         soil2Data.push(data.soil2);
         waterData.push(data.water);
@@ -422,7 +549,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function setupManualControls() {
         document.querySelectorAll('.pump-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
+            btn.addEventListener('click', function () {
                 if (state.mode !== 'manual') {
                     addLogEntry('⚠️ Ganti ke mode manual terlebih dahulu', 'warning');
                     return;
@@ -439,47 +566,54 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function setupAutoSettings() {
-        document.getElementById('dryThreshold1').addEventListener('input', function() {
+        document.getElementById('dryThreshold1').addEventListener('input', function () {
             state.dryThreshold1 = parseInt(this.value);
             document.getElementById('dryThresholdValue1').textContent = this.value + '%';
         });
-        document.getElementById('optimalThreshold1').addEventListener('input', function() {
+        document.getElementById('optimalThreshold1').addEventListener('input', function () {
             state.optimalThreshold1 = parseInt(this.value);
             document.getElementById('optimalThresholdValue1').textContent = this.value + '%';
         });
-        document.getElementById('wateringDuration1').addEventListener('input', function() {
-            state.wateringDuration1 = parseInt(this.value);
-            document.getElementById('wateringDurationValue1').textContent = this.value + ' detik';
-        });
-        document.getElementById('dryThreshold2').addEventListener('input', function() {
+        document.getElementById('dryThreshold2').addEventListener('input', function () {
             state.dryThreshold2 = parseInt(this.value);
             document.getElementById('dryThresholdValue2').textContent = this.value + '%';
         });
-        document.getElementById('optimalThreshold2').addEventListener('input', function() {
+        document.getElementById('optimalThreshold2').addEventListener('input', function () {
             state.optimalThreshold2 = parseInt(this.value);
             document.getElementById('optimalThresholdValue2').textContent = this.value + '%';
-        });
-        document.getElementById('wateringDuration2').addEventListener('input', function() {
-            state.wateringDuration2 = parseInt(this.value);
-            document.getElementById('wateringDurationValue2').textContent = this.value + ' detik';
         });
     }
 
     function setupCommonControls() {
-        document.getElementById('updateInterval').addEventListener('change', function() {
+        document.getElementById('updateInterval').addEventListener('change', function () {
             state.updateInterval = parseInt(this.value);
         });
         document.getElementById('refreshBtn').addEventListener('click', () => {
             addLogEntry('🔄 Refresh manual', 'info');
-            if (state.lastData) updateDashboardWithData(state.lastData);
-            else addLogEntry('⚠️ Belum ada data dari MQTT', 'warning');
+            if (state.lastData) {
+                const raw = state.lastData;
+                const smoothTemp = smoothTempValue(tempBuffer, raw.temp, SMOOTH_WINDOW_TEMP);
+                const smoothSoil1 = smoothValue(soil1Buffer, raw.soil1, SMOOTH_WINDOW_SOIL);
+                const smoothSoil2 = smoothValue(soil2Buffer, raw.soil2, SMOOTH_WINDOW_SOIL);
+                updateDashboardWithData({
+                    ...raw,
+                    temp: smoothTemp,
+                    soil1: smoothSoil1,
+                    soil2: smoothSoil2
+                });
+            } else {
+                addLogEntry('⚠️ Belum ada data dari MQTT', 'warning');
+            }
         });
         document.getElementById('resetBtn').addEventListener('click', () => {
             timeLabels.length = 0; tempData.length = 0; soil1Data.length = 0; soil2Data.length = 0; waterData.length = 0;
+            soil1Buffer.length = 0;
+            soil2Buffer.length = 0;
+            tempBuffer.length = 0;
             tempChart.update(); soil1Chart.update(); soil2Chart.update(); waterChart.update();
             state.dataCounter = 0; document.getElementById('dataCounter').textContent = '0';
             state.uptime = 0; document.getElementById('uptime').textContent = '0';
-            addLogEntry('🔄 Data grafik direset', 'info');
+            addLogEntry('🔄 Data grafik dan smoothing direset', 'info');
         });
     }
 
@@ -544,7 +678,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }, 2000);
 
-        addLogEntry('🚀 Dashboard siap (subscribe ke ' + MQTT_TOPIC_STATUS + ')', 'info');
+        addLogEntry('🚀 Dashboard siap (smoothing: soil window=' + SMOOTH_WINDOW_SOIL + ', temp window=' + SMOOTH_WINDOW_TEMP + ', suhu integer)', 'info');
     }
 
     initDashboard();
