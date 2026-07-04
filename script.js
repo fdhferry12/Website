@@ -1,7 +1,5 @@
-// Smart Greenhouse Dual Control - Pure MQTT (Subscribe ke topik spesifik)
-// + Soil Moisture Smoothing (Moving Average window 8)
-// + Temperature Smoothing (Moving Average window 3) -> dibulatkan ke integer (1°C)
-// Durasi penyiraman default 15 detik
+// Smart Greenhouse - Pure MQTT + Smoothing
+// Console HANYA menampilkan log komunikasi MQTT
 document.addEventListener('DOMContentLoaded', function () {
 
     // ===========================
@@ -29,11 +27,10 @@ document.addEventListener('DOMContentLoaded', function () {
     };
 
     // ===========================
-    // SMOOTHING BUFFER
+    // SMOOTHING
     // ===========================
     const SMOOTH_WINDOW_SOIL = 8;
     const SMOOTH_WINDOW_TEMP = 3;
-
     const soil1Buffer = [];
     const soil2Buffer = [];
     const tempBuffer = [];
@@ -45,7 +42,6 @@ document.addEventListener('DOMContentLoaded', function () {
         return +(sum / buffer.length).toFixed(1);
     }
 
-    // Fungsi khusus suhu: rata-rata lalu dibulatkan ke integer
     function smoothTempValue(buffer, newValue, windowSize) {
         const avg = smoothValue(buffer, newValue, windowSize);
         return Math.round(avg);
@@ -74,220 +70,121 @@ document.addEventListener('DOMContentLoaded', function () {
             tooltip: { mode: 'index', intersect: false }
         },
         scales: {
-            x: {
-                grid: { display: true, color: 'rgba(0,0,0,0.05)' },
-                ticks: { maxTicksLimit: 10 }
-            },
-            y: {
-                grid: { display: true, color: 'rgba(0,0,0,0.05)' },
-                beginAtZero: false
-            }
+            x: { grid: { display: true, color: 'rgba(0,0,0,0.05)' }, ticks: { maxTicksLimit: 10 } },
+            y: { grid: { display: true, color: 'rgba(0,0,0,0.05)' }, beginAtZero: false }
         },
         animation: { duration: 1000 },
         interaction: { intersect: false, mode: 'nearest' }
     };
 
     function initCharts() {
-        // Suhu (default)
         tempChart = new Chart(document.getElementById('tempChart').getContext('2d'), {
             type: 'line',
-            data: {
-                labels: timeLabels,
-                datasets: [{
-                    label: 'Suhu (°C)',
-                    data: tempData,
-                    borderColor: '#ff6b6b',
-                    backgroundColor: 'rgba(255,107,107,0.1)',
-                    borderWidth: 3,
-                    tension: 0.4,
-                    fill: true,
-                    pointRadius: 2,
-                    pointHoverRadius: 6
-                }]
-            },
+            data: { labels: timeLabels, datasets: [{ label: 'Suhu (°C)', data: tempData, borderColor: '#ff6b6b', backgroundColor: 'rgba(255,107,107,0.1)', borderWidth: 3, tension: 0.4, fill: true, pointRadius: 2, pointHoverRadius: 6 }] },
             options: commonChartOptions
         });
-
-        // Soil 1 (step 1%)
         soil1Chart = new Chart(document.getElementById('soil1Chart').getContext('2d'), {
             type: 'line',
-            data: {
-                labels: timeLabels,
-                datasets: [{
-                    label: 'Soil 1 (%)',
-                    data: soil1Data,
-                    borderColor: '#8B4513',
-                    backgroundColor: 'rgba(139,69,19,0.1)',
-                    borderWidth: 3,
-                    tension: 0.4,
-                    fill: true,
-                    pointRadius: 2,
-                    pointHoverRadius: 6
-                }]
-            },
-            options: {
-                ...commonChartOptions,
-                scales: {
-                    ...commonChartOptions.scales,
-                    y: {
-                        ...commonChartOptions.scales.y,
-                        ticks: {
-                            stepSize: 1,
-                            callback: function(value) { return value + '%'; }
-                        },
-                        min: 0,
-                        max: 100
-                    }
-                }
-            }
+            data: { labels: timeLabels, datasets: [{ label: 'Soil 1 (%)', data: soil1Data, borderColor: '#8B4513', backgroundColor: 'rgba(139,69,19,0.1)', borderWidth: 3, tension: 0.4, fill: true, pointRadius: 2, pointHoverRadius: 6 }] },
+            options: { ...commonChartOptions, scales: { ...commonChartOptions.scales, y: { ...commonChartOptions.scales.y, ticks: { stepSize: 1, callback: v => v + '%' }, min: 0, max: 100 } } }
         });
-
-        // Soil 2 (sama)
         soil2Chart = new Chart(document.getElementById('soil2Chart').getContext('2d'), {
             type: 'line',
-            data: {
-                labels: timeLabels,
-                datasets: [{
-                    label: 'Soil 2 (%)',
-                    data: soil2Data,
-                    borderColor: '#006400',
-                    backgroundColor: 'rgba(0,100,0,0.1)',
-                    borderWidth: 3,
-                    tension: 0.4,
-                    fill: true,
-                    pointRadius: 2,
-                    pointHoverRadius: 6
-                }]
-            },
-            options: {
-                ...commonChartOptions,
-                scales: {
-                    ...commonChartOptions.scales,
-                    y: {
-                        ...commonChartOptions.scales.y,
-                        ticks: {
-                            stepSize: 1,
-                            callback: function(value) { return value + '%'; }
-                        },
-                        min: 0,
-                        max: 100
-                    }
-                }
-            }
+            data: { labels: timeLabels, datasets: [{ label: 'Soil 2 (%)', data: soil2Data, borderColor: '#006400', backgroundColor: 'rgba(0,100,0,0.1)', borderWidth: 3, tension: 0.4, fill: true, pointRadius: 2, pointHoverRadius: 6 }] },
+            options: { ...commonChartOptions, scales: { ...commonChartOptions.scales, y: { ...commonChartOptions.scales.y, ticks: { stepSize: 1, callback: v => v + '%' }, min: 0, max: 100 } } }
         });
-
-        // Level Air
         waterChart = new Chart(document.getElementById('waterChart').getContext('2d'), {
             type: 'line',
-            data: {
-                labels: timeLabels,
-                datasets: [{
-                    label: 'Level Air (%)',
-                    data: waterData,
-                    borderColor: '#36d9d6',
-                    backgroundColor: 'rgba(54,217,214,0.1)',
-                    borderWidth: 3,
-                    tension: 0.4,
-                    fill: true,
-                    pointRadius: 2,
-                    pointHoverRadius: 6
-                }]
-            },
+            data: { labels: timeLabels, datasets: [{ label: 'Level Air (%)', data: waterData, borderColor: '#36d9d6', backgroundColor: 'rgba(54,217,214,0.1)', borderWidth: 3, tension: 0.4, fill: true, pointRadius: 2, pointHoverRadius: 6 }] },
             options: commonChartOptions
         });
     }
 
     // ===========================
-    // MQTT FUNCTIONS
+    // MQTT FUNCTIONS (DENGAN LOG KE CONSOLE)
     // ===========================
     function connectMQTT() {
+        console.log('🔄 [MQTT] Menghubungkan ke broker:', MQTT_BROKER);
         if (mqttClient) {
             try { mqttClient.end(true); } catch (e) { }
         }
         mqttClient = mqtt.connect(MQTT_BROKER, {
             clientId: 'web_dashboard_' + Math.random().toString(16).substr(2, 8),
             clean: true,
-            reconnectPeriod: 5000,
-            connectTimeout: 10000
+            reconnectPeriod: 10000,
+            connectTimeout: 5000
         });
 
         mqttClient.on('connect', () => {
+            console.log('✅ [MQTT] Terhubung ke broker!');
             state.mqttConnected = true;
             mqttClient.subscribe(MQTT_TOPIC_STATUS, { qos: 0 }, (err) => {
                 if (!err) {
-                    addLogEntry('📡 Terhubung ke MQTT (EMQX) - subscribe ke ' + MQTT_TOPIC_STATUS, 'info');
-                    document.getElementById('mqttStatus').innerHTML = '<i class="fas fa-cloud"></i> MQTT Terhubung';
-                    document.getElementById('mqttStatus').style.color = '#36d9d6';
+                    console.log('📡 [MQTT] Berhasil subscribe ke', MQTT_TOPIC_STATUS);
                 } else {
-                    addLogEntry('❌ Gagal subscribe: ' + err.message, 'error');
+                    console.error('❌ [MQTT] Gagal subscribe:', err);
                 }
             });
         });
 
         mqttClient.on('message', (topic, payload) => {
+            if (topic !== MQTT_TOPIC_STATUS) return;
             const msg = payload.toString();
-            if (topic === MQTT_TOPIC_STATUS) {
-                try {
-                    let raw = msg.replace(/:nan([,}])/gi, ':null$1').replace(/:inf(?:inity)?([,}])/gi, ':null$1');
-                    const json = JSON.parse(raw);
-                    const data = {
-                        temp: parseFloat(json.temp_C) || 0,
-                        soil1: parseFloat(json.soil1_pct) || 0,
-                        soil2: parseFloat(json.soil2_pct) || 0,
-                        water: parseFloat(json.level_pct) || 0,
-                        pump1: json.pump1 === true,
-                        pump2: json.pump2 === true
-                    };
-                    state.lastData = data;
-                    state.pump1On = data.pump1;
-                    state.pump2On = data.pump2;
-                    updatePumpStatusUI(1, state.pump1On);
-                    updatePumpStatusUI(2, state.pump2On);
-
-                    // --------- SMOOTHING (suhu dibulatkan) ----------
-                    const smoothTemp = smoothTempValue(tempBuffer, data.temp, SMOOTH_WINDOW_TEMP);
-                    const smoothSoil1 = smoothValue(soil1Buffer, data.soil1, SMOOTH_WINDOW_SOIL);
-                    const smoothSoil2 = smoothValue(soil2Buffer, data.soil2, SMOOTH_WINDOW_SOIL);
-
-                    const smoothedData = {
-                        ...data,
-                        temp: smoothTemp,
-                        soil1: smoothSoil1,
-                        soil2: smoothSoil2
-                    };
-                    updateDashboardWithData(smoothedData);
-                } catch (e) {
-                    console.error('Parse error:', e);
-                    addLogEntry('❌ Gagal parsing data: ' + e.message, 'error');
-                }
+            console.log('📩 [MQTT] Pesan masuk di', topic, ':', msg);
+            try {
+                let raw = msg.replace(/:nan([,}])/gi, ':null$1').replace(/:inf(?:inity)?([,}])/gi, ':null$1');
+                const json = JSON.parse(raw);
+                const data = {
+                    temp: parseFloat(json.temp_C || json.temp) || 0,
+                    soil1: parseFloat(json.soil1_pct || json.soil1) || 0,
+                    soil2: parseFloat(json.soil2_pct || json.soil2) || 0,
+                    water: parseFloat(json.level_pct || json.water) || 0,
+                    pump1: json.pump1 === true,
+                    pump2: json.pump2 === true
+                };
+                console.log('🔢 [MQTT] Data diparsing:', data);
+                state.pump1On = data.pump1;
+                state.pump2On = data.pump2;
+                updatePumpStatusUI(1, state.pump1On);
+                updatePumpStatusUI(2, state.pump2On);
+                processAndUpdateDashboard(data);
+            } catch (e) {
+                console.error('❌ [MQTT] Gagal parse pesan:', e);
             }
         });
 
         mqttClient.on('error', (err) => {
+            console.error('❌ [MQTT] Error:', err.message);
             state.mqttConnected = false;
-            document.getElementById('mqttStatus').innerHTML = '<i class="fas fa-exclamation-triangle"></i> Error MQTT';
-            document.getElementById('mqttStatus').style.color = '#ff6b6b';
-            addLogEntry(`❌ MQTT error: ${err.message}`, 'error');
         });
 
         mqttClient.on('close', () => {
+            console.warn('⚠️ [MQTT] Koneksi ditutup');
             state.mqttConnected = false;
-            document.getElementById('mqttStatus').innerHTML = '<i class="fas fa-exclamation-triangle"></i> Terputus';
-            document.getElementById('mqttStatus').style.color = '#ff6b6b';
+        });
+
+        mqttClient.on('offline', () => {
+            console.warn('⚡ [MQTT] Offline');
+        });
+
+        mqttClient.on('reconnect', () => {
+            console.log('🔄 [MQTT] Mencoba reconnect...');
         });
     }
 
     function sendPumpCommand(pump, cmd) {
         if (!mqttClient || !state.mqttConnected) {
-            addLogEntry('❌ MQTT tidak terhubung, tidak bisa mengirim perintah', 'error');
+            console.error('❌ MQTT tidak terhubung, tidak bisa mengirim perintah');
             return Promise.reject('MQTT not connected');
         }
         const topic = pump === 1 ? MQTT_TOPIC_PUMP1 : MQTT_TOPIC_PUMP2;
         return new Promise((resolve, reject) => {
             mqttClient.publish(topic, cmd, { qos: 1 }, (err) => {
-                if (err) reject(err);
-                else {
-                    console.log(`MQTT: pompa ${pump} -> ${cmd}`);
+                if (err) {
+                    console.error(`❌ MQTT pump${pump} gagal:`, err);
+                    reject(err);
+                } else {
+                    console.log(`✅ MQTT pompa ${pump} -> ${cmd} terkirim`);
                     resolve();
                 }
             });
@@ -321,55 +218,26 @@ document.addEventListener('DOMContentLoaded', function () {
         const color = on ? '#00cc66' : '#ccc';
         const text = on ? 'Menyala' : 'Mati';
         const el1 = document.getElementById(id1);
-        if (el1) {
-            el1.innerHTML = `<i class="fas fa-circle" style="color:${color};"></i> ${text}`;
-            el1.style.color = on ? '#00cc66' : '#999';
-        }
+        if (el1) { el1.innerHTML = `<i class="fas fa-circle" style="color:${color};"></i> ${text}`; el1.style.color = on ? '#00cc66' : '#999'; }
         const el2 = document.getElementById(id2);
-        if (el2) {
-            el2.innerHTML = `<i class="fas fa-circle" style="color:${color};"></i> ${text}`;
-            el2.className = `pump-status ${on ? 'on' : 'off'}`;
-        }
+        if (el2) { el2.innerHTML = `<i class="fas fa-circle" style="color:${color};"></i> ${text}`; el2.className = `pump-status ${on ? 'on' : 'off'}`; }
     }
 
     function updateStatusIndicators(data) {
         let cond = 'normal';
-        if (data.temp < 20) {
-            document.getElementById('tempStatus').textContent = 'Dingin';
-            document.getElementById('tempStatus').style.color = '#4d96ff';
-            cond = 'cold';
-        } else if (data.temp > 30) {
-            document.getElementById('tempStatus').textContent = 'Panas';
-            document.getElementById('tempStatus').style.color = '#ff6b6b';
-            cond = 'hot';
-        } else {
-            document.getElementById('tempStatus').textContent = 'Normal';
-            document.getElementById('tempStatus').style.color = '#36d9d6';
-        }
+        if (data.temp < 20) { document.getElementById('tempStatus').textContent = 'Dingin'; document.getElementById('tempStatus').style.color = '#4d96ff'; cond = 'cold'; }
+        else if (data.temp > 30) { document.getElementById('tempStatus').textContent = 'Panas'; document.getElementById('tempStatus').style.color = '#ff6b6b'; cond = 'hot'; }
+        else { document.getElementById('tempStatus').textContent = 'Normal'; document.getElementById('tempStatus').style.color = '#36d9d6'; }
         updateConditionMarkers(document.querySelector('.temp-condition-markers'), cond);
 
-        updateSoilStatus('soil1', data.soil1, state.dryThreshold1, state.optimalThreshold1,
-            document.querySelector('.soil-1 .soil-level-markers'));
-        updateSoilStatus('soil2', data.soil2, state.dryThreshold2, state.optimalThreshold2,
-            document.querySelector('.soil-2 .soil-level-markers'));
+        updateSoilStatus('soil1', data.soil1, state.dryThreshold1, state.optimalThreshold1, document.querySelector('.soil-1 .soil-level-markers'));
+        updateSoilStatus('soil2', data.soil2, state.dryThreshold2, state.optimalThreshold2, document.querySelector('.soil-2 .soil-level-markers'));
 
         const wf = document.getElementById('waterLevelFill');
         let wcond = 'normal';
-        if (data.water < 20) {
-            document.getElementById('waterStatus').innerHTML = '<i class="fas fa-exclamation-triangle"></i> Rendah';
-            document.getElementById('waterStatus').style.color = '#ff6b6b';
-            wf.style.background = 'linear-gradient(90deg, #ff6b6b, #ffa726)';
-            wcond = 'low';
-        } else if (data.water > 80) {
-            document.getElementById('waterStatus').innerHTML = '<i class="fas fa-check-circle"></i> Tinggi';
-            document.getElementById('waterStatus').style.color = '#00cc66';
-            wf.style.background = 'linear-gradient(90deg, #00cc66, #36d9d6)';
-            wcond = 'high';
-        } else {
-            document.getElementById('waterStatus').innerHTML = '<i class="fas fa-check-circle"></i> Normal';
-            document.getElementById('waterStatus').style.color = '#36d9d6';
-            wf.style.background = 'linear-gradient(90deg, #36d9d6, #4d96ff)';
-        }
+        if (data.water < 20) { document.getElementById('waterStatus').innerHTML = '<i class="fas fa-exclamation-triangle"></i> Rendah'; document.getElementById('waterStatus').style.color = '#ff6b6b'; wf.style.background = 'linear-gradient(90deg, #ff6b6b, #ffa726)'; wcond = 'low'; }
+        else if (data.water > 80) { document.getElementById('waterStatus').innerHTML = '<i class="fas fa-check-circle"></i> Tinggi'; document.getElementById('waterStatus').style.color = '#00cc66'; wf.style.background = 'linear-gradient(90deg, #00cc66, #36d9d6)'; wcond = 'high'; }
+        else { document.getElementById('waterStatus').innerHTML = '<i class="fas fa-check-circle"></i> Normal'; document.getElementById('waterStatus').style.color = '#36d9d6'; wf.style.background = 'linear-gradient(90deg, #36d9d6, #4d96ff)'; }
         updateConditionMarkers(document.querySelector('.water-level-markers'), wcond);
     }
 
@@ -378,19 +246,9 @@ document.addEventListener('DOMContentLoaded', function () {
         const rec = document.getElementById(`${prefix}Recommendation`);
         const fill = document.getElementById(`${prefix}LevelFill`);
         let cond = 'optimal';
-        if (value < dry) {
-            st.textContent = 'Kering'; st.style.color = '#D2691E';
-            rec.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <span>Butuh penyiraman!</span>';
-            rec.style.color = '#D2691E'; cond = 'dry';
-        } else if (value > optimal) {
-            st.textContent = 'Basah'; st.style.color = '#006400';
-            rec.innerHTML = '<i class="fas fa-check-circle"></i> <span>Kelembaban cukup</span>';
-            rec.style.color = '#006400'; cond = 'wet';
-        } else {
-            st.textContent = 'Optimal'; st.style.color = '#228B22';
-            rec.innerHTML = '<i class="fas fa-check-circle"></i> <span>Kondisi ideal</span>';
-            rec.style.color = '#228B22';
-        }
+        if (value < dry) { st.textContent = 'Kering'; st.style.color = '#D2691E'; rec.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <span>Butuh penyiraman!</span>'; rec.style.color = '#D2691E'; cond = 'dry'; }
+        else if (value > optimal) { st.textContent = 'Basah'; st.style.color = '#006400'; rec.innerHTML = '<i class="fas fa-check-circle"></i> <span>Kelembaban cukup</span>'; rec.style.color = '#006400'; cond = 'wet'; }
+        else { st.textContent = 'Optimal'; st.style.color = '#228B22'; rec.innerHTML = '<i class="fas fa-check-circle"></i> <span>Kondisi ideal</span>'; rec.style.color = '#228B22'; }
         if (fill) fill.style.width = `${value}%`;
         updateConditionMarkers(markers, cond);
     }
@@ -411,19 +269,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function startWatering(pump, noTimer = false) {
         const isWatering = pump === 1 ? state.isWatering1 : state.isWatering2;
-        if (isWatering) {
-            addLogEntry(`⚠️ Pompa ${pump} sudah berjalan`, 'warning');
-            return;
-        }
+        if (isWatering) { addLogEntry(`⚠️ Pompa ${pump} sudah berjalan`, 'warning'); return; }
         const dur = pump === 1 ? state.wateringDuration1 : state.wateringDuration2;
         sendPumpCommand(pump, 'on').then(() => {
-            if (pump === 1) {
-                state.isWatering1 = true;
-                state.pump1On = true;
-            } else {
-                state.isWatering2 = true;
-                state.pump2On = true;
-            }
+            if (pump === 1) { state.isWatering1 = true; state.pump1On = true; }
+            else { state.isWatering2 = true; state.pump2On = true; }
             updatePumpStatusUI(pump, true);
             if (noTimer) {
                 addLogEntry(`💧 Zona ${pump}: Penyiraman manual (tanpa timer)`, 'water-on');
@@ -439,19 +289,11 @@ document.addEventListener('DOMContentLoaded', function () {
     function stopWatering(pump) {
         sendPumpCommand(pump, 'off').then(() => {
             if (pump === 1) {
-                state.isWatering1 = false;
-                state.pump1On = false;
-                if (state.wateringTimer1) {
-                    clearTimeout(state.wateringTimer1);
-                    state.wateringTimer1 = null;
-                }
+                state.isWatering1 = false; state.pump1On = false;
+                if (state.wateringTimer1) { clearTimeout(state.wateringTimer1); state.wateringTimer1 = null; }
             } else {
-                state.isWatering2 = false;
-                state.pump2On = false;
-                if (state.wateringTimer2) {
-                    clearTimeout(state.wateringTimer2);
-                    state.wateringTimer2 = null;
-                }
+                state.isWatering2 = false; state.pump2On = false;
+                if (state.wateringTimer2) { clearTimeout(state.wateringTimer2); state.wateringTimer2 = null; }
             }
             updatePumpStatusUI(pump, false);
             addLogEntry(`💧 Zona ${pump}: Penyiraman selesai`, 'water-off');
@@ -460,22 +302,30 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function checkAutoWatering(data) {
         if (state.mode !== 'auto') return;
-        if (!state.isWatering1 && data.soil1 < state.dryThreshold1) {
-            addLogEntry(`🌱 Zona 1 auto watering`, 'auto-water');
-            startWatering(1, false);
-        }
-        if (!state.isWatering2 && data.soil2 < state.dryThreshold2) {
-            addLogEntry(`🌱 Zona 2 auto watering`, 'auto-water');
-            startWatering(2, false);
-        }
+        if (!state.isWatering1 && data.soil1 < state.dryThreshold1) { addLogEntry(`🌱 Zona 1 auto watering`, 'auto-water'); startWatering(1, false); }
+        if (!state.isWatering2 && data.soil2 < state.dryThreshold2) { addLogEntry(`🌱 Zona 2 auto watering`, 'auto-water'); startWatering(2, false); }
     }
 
     // ===========================
-    // DASHBOARD UPDATE
+    // DATA PROCESSING & DASHBOARD UPDATE
     // ===========================
+    function processAndUpdateDashboard(rawData) {
+        const smoothTemp = smoothTempValue(tempBuffer, rawData.temp, SMOOTH_WINDOW_TEMP);
+        const smoothSoil1 = smoothValue(soil1Buffer, rawData.soil1, SMOOTH_WINDOW_SOIL);
+        const smoothSoil2 = smoothValue(soil2Buffer, rawData.soil2, SMOOTH_WINDOW_SOIL);
+
+        const data = {
+            ...rawData,
+            temp: smoothTemp,
+            soil1: smoothSoil1,
+            soil2: smoothSoil2
+        };
+        state.lastData = data;
+        updateDashboardWithData(data);
+    }
+
     function updateDashboardWithData(data) {
         if (!data) return;
-        // Tampilkan suhu sebagai integer
         updateValueWithAnimation(document.getElementById('tempValue'), data.temp);
         updateValueWithAnimation(document.getElementById('soil1Value'), data.soil1);
         updateValueWithAnimation(document.getElementById('soil2Value'), data.soil2);
@@ -491,7 +341,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         timeLabels.push(time);
-        tempData.push(data.temp);   // data sudah integer
+        tempData.push(data.temp);
         soil1Data.push(data.soil1);
         soil2Data.push(data.soil2);
         waterData.push(data.water);
@@ -529,16 +379,8 @@ document.addEventListener('DOMContentLoaded', function () {
             addLogEntry(`Mode: ${mode === 'auto' ? 'Otomatis' : 'Manual'}`, 'mode-change');
 
             if (mode === 'manual') {
-                if (state.isWatering1) {
-                    clearTimeout(state.wateringTimer1);
-                    state.wateringTimer1 = null;
-                    stopWatering(1);
-                }
-                if (state.isWatering2) {
-                    clearTimeout(state.wateringTimer2);
-                    state.wateringTimer2 = null;
-                    stopWatering(2);
-                }
+                if (state.isWatering1) { clearTimeout(state.wateringTimer1); state.wateringTimer1 = null; stopWatering(1); }
+                if (state.isWatering2) { clearTimeout(state.wateringTimer2); state.wateringTimer2 = null; stopWatering(2); }
             }
         }
 
@@ -550,38 +392,20 @@ document.addEventListener('DOMContentLoaded', function () {
     function setupManualControls() {
         document.querySelectorAll('.pump-btn').forEach(btn => {
             btn.addEventListener('click', function () {
-                if (state.mode !== 'manual') {
-                    addLogEntry('⚠️ Ganti ke mode manual terlebih dahulu', 'warning');
-                    return;
-                }
+                if (state.mode !== 'manual') { addLogEntry('⚠️ Ganti ke mode manual terlebih dahulu', 'warning'); return; }
                 const pump = parseInt(this.dataset.pump);
                 const action = this.dataset.action;
-                if (action === 'on') {
-                    startWatering(pump, true);
-                } else {
-                    stopWatering(pump);
-                }
+                if (action === 'on') startWatering(pump, true);
+                else stopWatering(pump);
             });
         });
     }
 
     function setupAutoSettings() {
-        document.getElementById('dryThreshold1').addEventListener('input', function () {
-            state.dryThreshold1 = parseInt(this.value);
-            document.getElementById('dryThresholdValue1').textContent = this.value + '%';
-        });
-        document.getElementById('optimalThreshold1').addEventListener('input', function () {
-            state.optimalThreshold1 = parseInt(this.value);
-            document.getElementById('optimalThresholdValue1').textContent = this.value + '%';
-        });
-        document.getElementById('dryThreshold2').addEventListener('input', function () {
-            state.dryThreshold2 = parseInt(this.value);
-            document.getElementById('dryThresholdValue2').textContent = this.value + '%';
-        });
-        document.getElementById('optimalThreshold2').addEventListener('input', function () {
-            state.optimalThreshold2 = parseInt(this.value);
-            document.getElementById('optimalThresholdValue2').textContent = this.value + '%';
-        });
+        document.getElementById('dryThreshold1').addEventListener('input', function () { state.dryThreshold1 = parseInt(this.value); document.getElementById('dryThresholdValue1').textContent = this.value + '%'; });
+        document.getElementById('optimalThreshold1').addEventListener('input', function () { state.optimalThreshold1 = parseInt(this.value); document.getElementById('optimalThresholdValue1').textContent = this.value + '%'; });
+        document.getElementById('dryThreshold2').addEventListener('input', function () { state.dryThreshold2 = parseInt(this.value); document.getElementById('dryThresholdValue2').textContent = this.value + '%'; });
+        document.getElementById('optimalThreshold2').addEventListener('input', function () { state.optimalThreshold2 = parseInt(this.value); document.getElementById('optimalThresholdValue2').textContent = this.value + '%'; });
     }
 
     function setupCommonControls() {
@@ -590,26 +414,12 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         document.getElementById('refreshBtn').addEventListener('click', () => {
             addLogEntry('🔄 Refresh manual', 'info');
-            if (state.lastData) {
-                const raw = state.lastData;
-                const smoothTemp = smoothTempValue(tempBuffer, raw.temp, SMOOTH_WINDOW_TEMP);
-                const smoothSoil1 = smoothValue(soil1Buffer, raw.soil1, SMOOTH_WINDOW_SOIL);
-                const smoothSoil2 = smoothValue(soil2Buffer, raw.soil2, SMOOTH_WINDOW_SOIL);
-                updateDashboardWithData({
-                    ...raw,
-                    temp: smoothTemp,
-                    soil1: smoothSoil1,
-                    soil2: smoothSoil2
-                });
-            } else {
-                addLogEntry('⚠️ Belum ada data dari MQTT', 'warning');
-            }
+            if (state.lastData) updateDashboardWithData(state.lastData);
+            else addLogEntry('⚠️ Belum ada data dari MQTT', 'warning');
         });
         document.getElementById('resetBtn').addEventListener('click', () => {
             timeLabels.length = 0; tempData.length = 0; soil1Data.length = 0; soil2Data.length = 0; waterData.length = 0;
-            soil1Buffer.length = 0;
-            soil2Buffer.length = 0;
-            tempBuffer.length = 0;
+            soil1Buffer.length = 0; soil2Buffer.length = 0; tempBuffer.length = 0;
             tempChart.update(); soil1Chart.update(); soil2Chart.update(); waterChart.update();
             state.dataCounter = 0; document.getElementById('dataCounter').textContent = '0';
             state.uptime = 0; document.getElementById('uptime').textContent = '0';
@@ -620,43 +430,19 @@ document.addEventListener('DOMContentLoaded', function () {
     // ===========================
     // AUTH
     // ===========================
-    function displayUsername() {
-        document.getElementById('currentUser').textContent = localStorage.getItem('username') || 'Admin';
-    }
-    function setupLogout() {
-        document.getElementById('logoutBtn')?.addEventListener('click', () => {
-            if (confirm('Apakah Anda yakin ingin keluar?')) {
-                localStorage.removeItem('isLoggedIn');
-                localStorage.removeItem('username');
-                window.location.href = 'login.html';
-            }
-        });
-    }
+    function displayUsername() { document.getElementById('currentUser').textContent = localStorage.getItem('username') || 'Admin'; }
+    function setupLogout() { document.getElementById('logoutBtn')?.addEventListener('click', () => { if (confirm('Apakah Anda yakin ingin keluar?')) { localStorage.removeItem('isLoggedIn'); localStorage.removeItem('username'); window.location.href = 'login.html'; } }); }
     function setupAutoLogout() {
         let timer;
-        function reset() {
-            clearTimeout(timer);
-            timer = setTimeout(() => {
-                alert('Sesi berakhir. Silakan login kembali.');
-                localStorage.removeItem('isLoggedIn');
-                localStorage.removeItem('username');
-                window.location.href = 'login.html';
-            }, 30 * 60 * 1000);
-        }
-        document.addEventListener('mousemove', reset);
-        document.addEventListener('keypress', reset);
-        document.addEventListener('click', reset);
-        reset();
+        function reset() { clearTimeout(timer); timer = setTimeout(() => { alert('Sesi berakhir. Silakan login kembali.'); localStorage.removeItem('isLoggedIn'); localStorage.removeItem('username'); window.location.href = 'login.html'; }, 30 * 60 * 1000); }
+        document.addEventListener('mousemove', reset); document.addEventListener('keypress', reset); document.addEventListener('click', reset); reset();
     }
 
     // ===========================
     // INIT
     // ===========================
     function initDashboard() {
-        if (!localStorage.getItem('isLoggedIn')) {
-            window.location.href = 'login.html';
-            return;
-        }
+        if (!localStorage.getItem('isLoggedIn')) { window.location.href = 'login.html'; return; }
         displayUsername();
         setupLogout();
         setupAutoLogout();
@@ -678,7 +464,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }, 2000);
 
-        addLogEntry('🚀 Dashboard siap (smoothing: soil window=' + SMOOTH_WINDOW_SOIL + ', temp window=' + SMOOTH_WINDOW_TEMP + ', suhu integer)', 'info');
+        addLogEntry('🚀 Dashboard siap (MQTT murni, smoothing aktif)', 'info');
     }
 
     initDashboard();
