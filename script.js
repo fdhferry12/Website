@@ -1,5 +1,6 @@
 // Smart Greenhouse - Pure MQTT + Smoothing
-// Console HANYA menampilkan log komunikasi MQTT
+// Dashboard monitoring + kontrol manual. Kontrol otomatis diserahkan ke ESP32.
+// Threshold terpisah untuk Zona 1 dan Zona 2 dikirim ke ESP32.
 document.addEventListener('DOMContentLoaded', function () {
 
     // ===========================
@@ -13,14 +14,14 @@ document.addEventListener('DOMContentLoaded', function () {
         pump1On: false,
         isWatering1: false,
         wateringTimer1: null,
-        dryThreshold1: 30,
-        optimalThreshold1: 60,
+        dryThreshold1: 30,          // Zona 1
+        wetThreshold1: 60,
         wateringDuration1: 15,
         pump2On: false,
         isWatering2: false,
         wateringTimer2: null,
-        dryThreshold2: 30,
-        optimalThreshold2: 60,
+        dryThreshold2: 30,          // Zona 2
+        wetThreshold2: 60,
         wateringDuration2: 15,
         mqttConnected: false,
         lastData: null
@@ -54,6 +55,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const MQTT_TOPIC_STATUS = 'tandon/status';
     const MQTT_TOPIC_PUMP1 = 'tandon/pump1/control';
     const MQTT_TOPIC_PUMP2 = 'tandon/pump2/control';
+    const MQTT_TOPIC_MODE = 'tandon/mode';
+    const MQTT_TOPIC_THRESHOLD = 'tandon/threshold';
     let mqttClient = null;
 
     // ===========================
@@ -101,7 +104,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // ===========================
-    // MQTT FUNCTIONS (DENGAN LOG KE CONSOLE)
+    // MQTT FUNCTIONS
     // ===========================
     function connectMQTT() {
         console.log('🔄 [MQTT] Menghubungkan ke broker:', MQTT_BROKER);
@@ -125,6 +128,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     console.error('❌ [MQTT] Gagal subscribe:', err);
                 }
             });
+            // Kirim threshold default saat terkoneksi
+            sendThreshold();
         });
 
         mqttClient.on('message', (topic, payload) => {
@@ -191,6 +196,36 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    function sendModeCommand(mode) {
+        if (!mqttClient || !state.mqttConnected) {
+            console.error('❌ MQTT tidak terhubung, tidak bisa mengirim mode');
+            return;
+        }
+        mqttClient.publish(MQTT_TOPIC_MODE, mode, { qos: 1 }, (err) => {
+            if (err) {
+                console.error('❌ Gagal mengirim mode:', err);
+            } else {
+                console.log(`📤 Mode terkirim ke ESP32: ${mode}`);
+            }
+        });
+    }
+
+    // Kirim threshold kedua zona ke ESP32
+    function sendThreshold() {
+        if (!mqttClient || !state.mqttConnected) return;
+        const payload = JSON.stringify({
+            zone1: { dry: state.dryThreshold1, wet: state.wetThreshold1 },
+            zone2: { dry: state.dryThreshold2, wet: state.wetThreshold2 }
+        });
+        mqttClient.publish(MQTT_TOPIC_THRESHOLD, payload, { qos: 1 }, (err) => {
+            if (err) {
+                console.error('❌ Gagal mengirim threshold:', err);
+            } else {
+                console.log(`📤 Threshold terkirim: Z1(dry=${state.dryThreshold1},wet=${state.wetThreshold1}) Z2(dry=${state.dryThreshold2},wet=${state.wetThreshold2})`);
+            }
+        });
+    }
+
     // ===========================
     // UI UPDATE FUNCTIONS
     // ===========================
@@ -230,8 +265,9 @@ document.addEventListener('DOMContentLoaded', function () {
         else { document.getElementById('tempStatus').textContent = 'Normal'; document.getElementById('tempStatus').style.color = '#36d9d6'; }
         updateConditionMarkers(document.querySelector('.temp-condition-markers'), cond);
 
-        updateSoilStatus('soil1', data.soil1, state.dryThreshold1, state.optimalThreshold1, document.querySelector('.soil-1 .soil-level-markers'));
-        updateSoilStatus('soil2', data.soil2, state.dryThreshold2, state.optimalThreshold2, document.querySelector('.soil-2 .soil-level-markers'));
+        // Gunakan threshold per zona
+        updateSoilStatus('soil1', data.soil1, state.dryThreshold1, state.wetThreshold1, document.querySelector('.soil-1 .soil-level-markers'));
+        updateSoilStatus('soil2', data.soil2, state.dryThreshold2, state.wetThreshold2, document.querySelector('.soil-2 .soil-level-markers'));
 
         const wf = document.getElementById('waterLevelFill');
         let wcond = 'normal';
@@ -241,20 +277,20 @@ document.addEventListener('DOMContentLoaded', function () {
         updateConditionMarkers(document.querySelector('.water-level-markers'), wcond);
     }
 
-    function updateSoilStatus(prefix, value, dry, optimal, markers) {
+    function updateSoilStatus(prefix, value, dry, wet, markers) {
         const st = document.getElementById(`${prefix}Status`);
         const rec = document.getElementById(`${prefix}Recommendation`);
         const fill = document.getElementById(`${prefix}LevelFill`);
         let cond = 'optimal';
         if (value < dry) { st.textContent = 'Kering'; st.style.color = '#D2691E'; rec.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <span>Butuh penyiraman!</span>'; rec.style.color = '#D2691E'; cond = 'dry'; }
-        else if (value > optimal) { st.textContent = 'Basah'; st.style.color = '#006400'; rec.innerHTML = '<i class="fas fa-check-circle"></i> <span>Kelembaban cukup</span>'; rec.style.color = '#006400'; cond = 'wet'; }
+        else if (value > wet) { st.textContent = 'Basah'; st.style.color = '#006400'; rec.innerHTML = '<i class="fas fa-check-circle"></i> <span>Kelembaban cukup</span>'; rec.style.color = '#006400'; cond = 'wet'; }
         else { st.textContent = 'Optimal'; st.style.color = '#228B22'; rec.innerHTML = '<i class="fas fa-check-circle"></i> <span>Kondisi ideal</span>'; rec.style.color = '#228B22'; }
         if (fill) fill.style.width = `${value}%`;
         updateConditionMarkers(markers, cond);
     }
 
     // ===========================
-    // WATERING LOGIC
+    // WATERING LOGIC (hanya untuk perintah manual)
     // ===========================
     function addLogEntry(msg, type = 'info') {
         const log = document.getElementById('logContent');
@@ -278,7 +314,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (noTimer) {
                 addLogEntry(`💧 Zona ${pump}: Penyiraman manual (tanpa timer)`, 'water-on');
             } else {
-                addLogEntry(`💧 Zona ${pump}: Penyiraman otomatis (${dur} detik)`, 'water-on');
+                addLogEntry(`💧 Zona ${pump}: Penyiraman manual (${dur} detik)`, 'water-on');
                 const timer = setTimeout(() => stopWatering(pump), dur * 1000);
                 if (pump === 1) state.wateringTimer1 = timer;
                 else state.wateringTimer2 = timer;
@@ -298,12 +334,6 @@ document.addEventListener('DOMContentLoaded', function () {
             updatePumpStatusUI(pump, false);
             addLogEntry(`💧 Zona ${pump}: Penyiraman selesai`, 'water-off');
         }).catch(e => addLogEntry(`❌ Gagal mematikan pompa ${pump}: ${e.message}`, 'error'));
-    }
-
-    function checkAutoWatering(data) {
-        if (state.mode !== 'auto') return;
-        if (!state.isWatering1 && data.soil1 < state.dryThreshold1) { addLogEntry(`🌱 Zona 1 auto watering`, 'auto-water'); startWatering(1, false); }
-        if (!state.isWatering2 && data.soil2 < state.dryThreshold2) { addLogEntry(`🌱 Zona 2 auto watering`, 'auto-water'); startWatering(2, false); }
     }
 
     // ===========================
@@ -337,7 +367,7 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('tempGaugeFill').style.width = `${Math.min(data.temp * 2, 100)}%`;
 
         updateStatusIndicators(data);
-        checkAutoWatering(data);
+        // Tidak ada checkAutoWatering – kontrol otomatis di ESP32
 
         const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         timeLabels.push(time);
@@ -378,9 +408,21 @@ document.addEventListener('DOMContentLoaded', function () {
             modeStatus.style.color = mode === 'auto' ? '#43c51e' : '#ff2626';
             addLogEntry(`Mode: ${mode === 'auto' ? 'Otomatis' : 'Manual'}`, 'mode-change');
 
+            // Kirim mode ke ESP32
+            sendModeCommand(mode);
+
             if (mode === 'manual') {
-                if (state.isWatering1) { clearTimeout(state.wateringTimer1); state.wateringTimer1 = null; stopWatering(1); }
-                if (state.isWatering2) { clearTimeout(state.wateringTimer2); state.wateringTimer2 = null; stopWatering(2); }
+                // Matikan semua timer dan pompa
+                if (state.wateringTimer1) { clearTimeout(state.wateringTimer1); state.wateringTimer1 = null; }
+                if (state.wateringTimer2) { clearTimeout(state.wateringTimer2); state.wateringTimer2 = null; }
+                stopWatering(1);
+                stopWatering(2);
+                state.isWatering1 = false;
+                state.isWatering2 = false;
+                state.pump1On = false;
+                state.pump2On = false;
+                updatePumpStatusUI(1, false);
+                updatePumpStatusUI(2, false);
             }
         }
 
@@ -402,10 +444,28 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function setupAutoSettings() {
-        document.getElementById('dryThreshold1').addEventListener('input', function () { state.dryThreshold1 = parseInt(this.value); document.getElementById('dryThresholdValue1').textContent = this.value + '%'; });
-        document.getElementById('optimalThreshold1').addEventListener('input', function () { state.optimalThreshold1 = parseInt(this.value); document.getElementById('optimalThresholdValue1').textContent = this.value + '%'; });
-        document.getElementById('dryThreshold2').addEventListener('input', function () { state.dryThreshold2 = parseInt(this.value); document.getElementById('dryThresholdValue2').textContent = this.value + '%'; });
-        document.getElementById('optimalThreshold2').addEventListener('input', function () { state.optimalThreshold2 = parseInt(this.value); document.getElementById('optimalThresholdValue2').textContent = this.value + '%'; });
+        // Zona 1
+        document.getElementById('dryThreshold1').addEventListener('input', function () {
+            state.dryThreshold1 = parseInt(this.value);
+            document.getElementById('dryThresholdValue1').textContent = this.value + '%';
+            sendThreshold();
+        });
+        document.getElementById('optimalThreshold1').addEventListener('input', function () {
+            state.wetThreshold1 = parseInt(this.value);
+            document.getElementById('optimalThresholdValue1').textContent = this.value + '%';
+            sendThreshold();
+        });
+        // Zona 2
+        document.getElementById('dryThreshold2').addEventListener('input', function () {
+            state.dryThreshold2 = parseInt(this.value);
+            document.getElementById('dryThresholdValue2').textContent = this.value + '%';
+            sendThreshold();
+        });
+        document.getElementById('optimalThreshold2').addEventListener('input', function () {
+            state.wetThreshold2 = parseInt(this.value);
+            document.getElementById('optimalThresholdValue2').textContent = this.value + '%';
+            sendThreshold();
+        });
     }
 
     function setupCommonControls() {
@@ -464,7 +524,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }, 2000);
 
-        addLogEntry('🚀 Dashboard siap (MQTT murni, smoothing aktif)', 'info');
+        addLogEntry('🚀 Dashboard siap (MQTT murni, kontrol otomatis di ESP32, threshold 2 zona)', 'info');
     }
 
     initDashboard();
